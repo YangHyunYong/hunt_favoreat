@@ -4,7 +4,8 @@ import { base, mainnet } from "wagmi/chains";
 import { createAppKit } from '@reown/appkit'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 
-const projectId = '10e9bcf31951bca3f4ef39cac2e19a34' // 실제 프로젝트 ID로 교체 필요
+// const projectId = '10e9bcf31951bca3f4ef39cac2e19a34' // 실제 프로젝트 ID로 교체 필요
+const projectId = import.meta.env.VITE_WC_PROJECT_ID // 실제 프로젝트 ID로 교체 필요
 
 const wagmiAdapter = new WagmiAdapter({
   networks: [mainnet, base],

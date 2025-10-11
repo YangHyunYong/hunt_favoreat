@@ -1,14 +1,24 @@
 import { sdk } from "@farcaster/frame-sdk";
 import { useEffect } from "react";
+import { Routes, Route } from "react-router-dom";
 import { useSignMessage } from "wagmi"; // 서명은 wagmi 훅 사용(앱킷 어댑터가 provider 제공)
 import { useAppKitAccount, useDisconnect } from "@reown/appkit/react";
 import { modal } from "./wagmi";
+import MainScreen from "./MainScreen";
+import StoreDetailScreen from "./StoreDetailScreen";
 
 function App() {
   useEffect(() => {
     sdk.actions.ready();
   }, []);
-  return <ConnectMenu />;
+
+  return (
+    <Routes>
+      <Route path="/" element={<MainScreen />} />
+      <Route path="/store/:id" element={<StoreDetailScreen />} />
+      <Route path="/connect" element={<ConnectMenu />} />
+    </Routes>
+  );
 }
 
 function ConnectMenu() {
