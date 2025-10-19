@@ -49,7 +49,7 @@ const Rating: React.FC<RatingProps> = ({
   };
 
   return (
-    <div className="flex gap-2" role="radiogroup" aria-label="rating">
+    <div className="flex" role="radiogroup" aria-label="rating">
       {Array.from({ length: 5 }).map((_, i) => {
         // i번째 별의 채움 비율 계산 (0, 50, 100)
         const full = i + 1;
@@ -64,11 +64,11 @@ const Rating: React.FC<RatingProps> = ({
             onTouchStart={handleTouch(i)}
             aria-checked={value > i && value <= i + 1}
             role="radio"
-            className="relative h-10"
-            style={{ width: sizePx, height: sizePx }}
+            className="relative h-10 cursor-pointer"
+            style={{ width: sizePx, height: sizePx, margin: "7.5px" }}
           >
             <div className="absolute inset-0">
-              {/* 기본 회색 별 배경 */}
+              {/* 기본 회색 별 배경 (선택 전 상태 표시) */}
               <div
                 aria-hidden
                 className="absolute inset-0"
@@ -77,21 +77,9 @@ const Rating: React.FC<RatingProps> = ({
                   WebkitMaskImage: `url(${icon})`,
                   maskSize: "cover",
                   WebkitMaskSize: "cover",
-                  backgroundColor: "#E5E7EB", // gray-200 정도 (기본 회색)
-                }}
-              />
-
-              {/* 흰색 내부 채움 (선택사항: 중첩 시 필요 없으면 제거 가능) */}
-              <div
-                aria-hidden
-                className="absolute inset-0"
-                style={{
-                  maskImage: `url(${icon})`,
-                  WebkitMaskImage: `url(${icon})`,
-                  maskSize: "cover",
-                  WebkitMaskSize: "cover",
-                  backgroundColor: "#FFFFFF",
-                  mixBlendMode: "lighten",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskRepeat: "no-repeat",
+                  backgroundColor: "#D1D5DB", // gray-300 기본 회색
                 }}
               />
             </div>
@@ -110,6 +98,8 @@ const Rating: React.FC<RatingProps> = ({
                   WebkitMaskImage: `url(${icon})`,
                   maskSize: "cover",
                   WebkitMaskSize: "cover",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskRepeat: "no-repeat",
                   backgroundColor: "#F97316", // orange-500
                 }}
               />

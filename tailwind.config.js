@@ -13,10 +13,13 @@ export default {
         gray: {
           50: "var(--Gray-50, #FAFAFA)",
           100: "var(--Gray-100, #F5F5F5)",
+          200: "var(--Gray-200, #E5E5E5)",
           400: "var(--Gray-400, #A3A3A3)",
+          500: "var(--Gray-500, #737373)",
           600: "var(--Gray-600, #525252)",
           700: "var(--Gray-700, #404040)",
           800: "var(--Gray-800, #262626)",
+          900: "var(--Gray-900, #171717)",
           950: "var(--Gray-950, #0A0A0A)",
         },
         blue: {
@@ -62,6 +65,12 @@ export default {
 
         //
         "location-content": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+        "action-content": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+
+        "review-text-count": [
+          "14px",
+          { lineHeight: "16px", fontWeight: "400" },
+        ],
 
         // (8/9번) 본문 세미볼드
         "review-title": [
@@ -79,6 +88,16 @@ export default {
         "caption2-400": [
           "12px",
           { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "400" },
+        ],
+
+        // placeholder
+        "placeholder-content": [
+          "16px",
+          { lineHeight: "24px", letterSpacing: "0.01em", fontWeight: "500" },
+        ],
+        "confirm-content": [
+          "16px",
+          { lineHeight: "24px", letterSpacing: "0.01em", fontWeight: "400" },
         ],
       },
     },

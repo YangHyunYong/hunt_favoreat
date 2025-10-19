@@ -305,6 +305,64 @@ const MainScreen: React.FC = () => {
     );
   };
 
+  // 사진 블록: 둘 다 없거나 에러일 때 하나의 placeholder만 표시
+  const PhotosBlock: React.FC<{ img1?: string; img2?: string }> = ({
+    img1,
+    img2,
+  }) => {
+    // 에러/결측 여부를 내부에서 추적하여 둘 다 실패하면 하나의 placeholder만 노출
+    const [err1, setErr1] = useState<boolean>(!img1);
+    const [err2, setErr2] = useState<boolean>(!img2);
+
+    const allMissingOrError = (!img1 || err1) && (!img2 || err2);
+
+    if (allMissingOrError) {
+      return (
+        <div className="mb-4">
+          <div className="flex h-[136px] justify-center items-center rounded-[16px] bg-gray-200 text-gray-500 text-location-content">
+            no Image
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* 첫 번째 칸 */}
+        {!img1 || err1 ? (
+          <div className="flex h-[136px] justify-center items-center rounded-[16px] bg-gray-200 text-gray-500 text-location-content">
+            no Image
+          </div>
+        ) : (
+          <img
+            src={img1}
+            alt="Place photo 1"
+            decoding="async"
+            loading="eager"
+            className="w-full h-[136px] object-cover rounded-2xl"
+            onError={() => setErr1(true)}
+          />
+        )}
+
+        {/* 두 번째 칸 */}
+        {!img2 || err2 ? (
+          <div className="flex h-[136px] justify-center items-center rounded-2xl bg-gray-200 text-gray-500">
+            no Image
+          </div>
+        ) : (
+          <img
+            src={img2}
+            alt="Place photo 2"
+            decoding="async"
+            loading="eager"
+            className="w-full h-[136px] object-cover rounded-2xl"
+            onError={() => setErr2(true)}
+          />
+        )}
+      </div>
+    );
+  };
+
   const heroTitle =
     selectedPlace?.displayName || "Burger Boy and Burger girl are dancing now";
   const img1 = selectedPlace?.photos?.[0] || "/sample/burger.jpg";
@@ -315,10 +373,14 @@ const MainScreen: React.FC = () => {
   return (
     <div>
       <Header
+        leftElement={<div></div>}
         rightElement={
           <button className="p-2 h-15 bg-white">
             <img src="/icons/dots-vertical.svg" className="w-8 h-8" />
           </button>
+        }
+        centerElement={
+          <div className="text-gray-600 text-rating-count">FavorEat</div>
         }
       />
       <div className="h-screen overflow-visible bg-white flex flex-col font-sans relative">
@@ -443,29 +505,16 @@ const MainScreen: React.FC = () => {
                   </div>
                   <div className="flex gap-2 flex-none shrink-0">
                     <button className="p-3 bg-gray-100 rounded-[16px]">
-                      <img src="/icons/share-07.svg" className="w-3 h-3" />
+                      <img src="/icons/share-07.svg" className="w-4 h-4" />
                     </button>
                     <button className="p-3 bg-gray-100 rounded-[16px]">
-                      <img src="/icons/bookmark.svg" className="w-3 h-3" />
+                      <img src="/icons/bookmark.svg" className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
 
                 {/* 이미지 2개 */}
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <img
-                    src={img1}
-                    decoding="async"
-                    loading="eager"
-                    className="w-full h-36 object-cover rounded-2xl"
-                  />
-                  <img
-                    src={img2}
-                    decoding="async"
-                    loading="eager"
-                    className="w-full h-36 object-cover rounded-2xl"
-                  />
-                </div>
+                <PhotosBlock img1={img1} img2={img2} />
 
                 {/* 별점 + 리뷰수 + 버튼 */}
                 <div className="flex items-center justify-between">
