@@ -412,10 +412,10 @@ const StoreDetailScreen: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col justify-center items-center text-center bg-gray-200 text-gray-600 h-[200px]">
-          <p className="text-sm mb-1">no review yet</p>
-          <p className="text-lg font-semibold">Be the first reviewer</p>
-          <p className="text-md font-semibold">
+        <div className="flex flex-col justify-start pt-[18px] text-center bg-gray-200 text-gray-600 h-screen">
+          <p className="text-location-content mb-1">no review yet</p>
+          <p className="text-location-content-700">Be the first reviewer</p>
+          <p className="text-location-content-700">
             Just fill in that empty star up there!
           </p>
         </div>

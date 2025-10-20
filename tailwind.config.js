@@ -95,6 +95,10 @@ export default {
           "16px",
           { lineHeight: "24px", letterSpacing: "0.01em", fontWeight: "500" },
         ],
+        "location-content-700": [
+          "18px",
+          { lineHeight: "26px", letterSpacing: "0.01em", fontWeight: "700" },
+        ],
         "confirm-content": [
           "16px",
           { lineHeight: "24px", letterSpacing: "0.01em", fontWeight: "400" },
