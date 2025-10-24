@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useAppKitAccount } from "@reown/appkit/react";
+import { useAccount } from "wagmi";
 import { sdk } from "@farcaster/frame-sdk";
 import Header from "./components/Header";
 import Rating from "./components/Rating";
@@ -83,7 +84,11 @@ const StoreDetailScreen: React.FC = () => {
   const { id } = useParams(); // /store/:displayName
   const location = useLocation();
   const place = (location.state || {}) as PlaceDetailsResult;
-  const { address } = useAppKitAccount();
+  const { address: appKitAddress } = useAppKitAccount();
+  const { address: wagmiAddress } = useAccount();
+
+  // Farcaster 자동 로그인과 일반 로그인 모두 지원
+  const address = wagmiAddress || appKitAddress;
   const { submitReview } = useFavoreatApi();
 
   // 기본 데이터 설정 (state 없을 경우 대비)
@@ -455,7 +460,7 @@ const StoreDetailScreen: React.FC = () => {
       } else {
         // 데스크톱에서 클립보드에 복사
         await navigator.clipboard.writeText(googleMapsUrl);
-        alert("Google Maps 링크가 클립보드에 복사되었습니다!");
+        console.log("Google Maps 링크가 클립보드에 복사되었습니다!");
       }
     } catch (error) {
       console.error("공유 실패:", error);
@@ -465,10 +470,10 @@ const StoreDetailScreen: React.FC = () => {
           ? `https://www.google.com/maps/place/?q=place_id:${place.placeId}`
           : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayName)}`;
         await navigator.clipboard.writeText(googleMapsUrl);
-        alert("Google Maps 링크가 클립보드에 복사되었습니다!");
+        console.log("Google Maps 링크가 클립보드에 복사되었습니다!");
       } catch (clipboardError) {
         console.error("클립보드 복사 실패:", clipboardError);
-        alert("공유 기능을 사용할 수 없습니다.");
+        console.error("공유 기능을 사용할 수 없습니다.");
       }
     }
   };
@@ -476,12 +481,12 @@ const StoreDetailScreen: React.FC = () => {
   // 북마크 토글 기능
   const handleBookmarkToggle = async () => {
     if (!place || !address) {
-      alert("지갑을 연결해주세요.");
+      console.log("지갑을 연결해주세요.");
       return;
     }
 
     if (!place.placeId) {
-      alert("장소 정보를 가져올 수 없습니다.");
+      console.log("장소 정보를 가져올 수 없습니다.");
       return;
     }
 
@@ -492,25 +497,27 @@ const StoreDetailScreen: React.FC = () => {
 
     try {
       if (!placeUuid) {
-        alert("장소 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+        console.log(
+          "장소 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요."
+        );
         return;
       }
 
       if (originalBookmarkState) {
         // 북마크 해제
         await removeBookmark(placeUuid, address);
-        alert("북마크가 해제되었습니다.");
+        console.log("북마크가 해제되었습니다.");
       } else {
         // 북마크 추가
         await addBookmark(placeUuid, address);
-        alert("북마크에 추가되었습니다.");
+        console.log("북마크에 추가되었습니다.");
       }
     } catch (error) {
       console.error("북마크 처리 실패:", error);
 
       // 에러 발생 시 원래 상태로 되돌리기
       setIsBookmarked(originalBookmarkState);
-      alert("북마크 처리 중 오류가 발생했습니다.");
+      console.error("북마크 처리 중 오류가 발생했습니다.");
     }
   };
 
@@ -610,7 +617,7 @@ const StoreDetailScreen: React.FC = () => {
       setMyRating(0);
     } catch (error) {
       console.error("❌ Review submission failed:", error);
-      alert("리뷰 제출에 실패했습니다: " + error);
+      console.error("리뷰 제출에 실패했습니다: " + error);
     }
   };
 
@@ -912,7 +919,7 @@ const StoreDetailScreen: React.FC = () => {
 
                           // Farcaster 환경이 아닌 경우 처리
                           if (!sdk.actions.composeCast) {
-                            alert(
+                            console.log(
                               "Farcaster 환경에서만 Cast 기능을 사용할 수 있습니다."
                             );
                             return;
@@ -951,15 +958,15 @@ const StoreDetailScreen: React.FC = () => {
                               "Cast posted successfully:",
                               result.cast.hash
                             );
-                            alert("Cast가 성공적으로 작성되었습니다!");
+                            console.log("Cast가 성공적으로 작성되었습니다!");
                           } else {
                             console.log("Cast가 취소되었거나 실패했습니다.");
-                            alert("Cast 작성이 취소되었습니다.");
+                            console.log("Cast 작성이 취소되었습니다.");
                           }
                         } catch (error) {
                           console.error("Cast 작성 실패:", error);
                           console.error("에러 상세:", error);
-                          alert(
+                          console.error(
                             `Cast 작성에 실패했습니다: ${error instanceof Error ? error.message : String(error)}`
                           );
                         }
@@ -1045,6 +1052,12 @@ const StoreDetailScreen: React.FC = () => {
                     const now = new Date();
                     const reviewTime = new Date(review.created_at);
                     const diffMs = now.getTime() - reviewTime.getTime();
+
+                    // 음수 시간 방지 (방금 등록한 경우 "방금" 표시)
+                    if (diffMs < 0) {
+                      return "방금";
+                    }
+
                     const diffMinutes = Math.floor(diffMs / (1000 * 60));
                     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
                     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -1059,8 +1072,10 @@ const StoreDetailScreen: React.FC = () => {
                       return `${diffDays}d`;
                     } else if (diffHours >= 1) {
                       return `${diffHours}h`;
-                    } else {
+                    } else if (diffMinutes >= 1) {
                       return `${diffMinutes}m`;
+                    } else {
+                      return "방금";
                     }
                   })()}
                 </span>
@@ -1071,7 +1086,7 @@ const StoreDetailScreen: React.FC = () => {
                   <button
                     onClick={async () => {
                       if (!address) {
-                        alert("지갑을 연결해주세요.");
+                        console.log("지갑을 연결해주세요.");
                         return;
                       }
 
@@ -1102,9 +1117,9 @@ const StoreDetailScreen: React.FC = () => {
                           error instanceof Error &&
                           error.message.includes("이미 좋아요를 누른")
                         ) {
-                          alert("이미 좋아요를 누른 리뷰입니다.");
+                          console.log("이미 좋아요를 누른 리뷰입니다.");
                         } else {
-                          alert("좋아요 처리 중 오류가 발생했습니다.");
+                          console.error("좋아요 처리 중 오류가 발생했습니다.");
                         }
                       }
                     }}
@@ -1179,7 +1194,7 @@ const StoreDetailScreen: React.FC = () => {
             setDeleteSuccess(true);
           } catch (error) {
             console.error("리뷰 삭제 실패:", error);
-            alert("리뷰 삭제에 실패했습니다.");
+            console.error("리뷰 삭제에 실패했습니다.");
             setShowDeleteModal(false);
             setReviewToDelete(null);
             setDeleteSuccess(false);

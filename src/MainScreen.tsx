@@ -6,6 +6,7 @@ import Header from "./components/Header";
 import ConnectWalletButton from "./components/ConnectWalletButton";
 import UserMenu from "./components/UserMenu";
 import { useAppKitAccount } from "@reown/appkit/react";
+import { useAccount } from "wagmi";
 import {
   addBookmark,
   removeBookmark,
@@ -251,18 +252,28 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
         });
         gMapRef.current = gMap;
 
-        // 기존 마커 사용 (비용 절약)
+        // 핀 형태 마커 생성
+        const pinIcon = {
+          path: "M12,2C8.13,2 5,5.13 5,9c0,5.25 7,13 7,13s7,-7.75 7,-13C19,5.13 15.87,2 12,2z M12,11.5A2.5,2.5 0 0,1 9.5,9A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 14.5,9A2.5,2.5 0 0,1 12,11.5z",
+          fillColor: "#F97316",
+          fillOpacity: 1,
+          strokeColor: "#FFFFFF",
+          strokeWeight: 2,
+          scale: 1.5,
+          anchor: new google.maps.Point(12, 22),
+        };
+
+        // 기존 마커 사용 (비용 절약) - 핀 형태 아이콘 적용
         markerRef.current = new google.maps.Marker({
           map: gMap,
           position,
           title: "현재 위치",
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: "#F97316",
-            fillOpacity: 1,
-            strokeColor: "#FFFFFF",
-            strokeWeight: 2,
+          icon: pinIcon,
+          label: {
+            text: " ",
+            color: "#FFFFFF",
+            fontSize: "14px",
+            fontWeight: "bold",
           },
         });
 
@@ -416,7 +427,7 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
       } catch (error) {
         console.error("지도 초기화 실패:", error);
         // 지도 초기화 실패 시 사용자에게 알림
-        alert("지도를 불러올 수 없습니다. 페이지를 새로고침해주세요.");
+        console.error("지도를 불러올 수 없습니다. 페이지를 새로고침해주세요.");
       }
     }
 
@@ -435,7 +446,11 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
 
 const MainScreen: React.FC = () => {
   const [cityName, setCityName] = useState("");
-  const { address } = useAppKitAccount();
+  const { address: appKitAddress } = useAppKitAccount();
+  const { address: wagmiAddress } = useAccount();
+
+  // Farcaster 자동 로그인과 일반 로그인 모두 지원
+  const address = wagmiAddress || appKitAddress;
 
   const [townName, setTownName] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<PlaceDetailsResult | null>(
@@ -706,7 +721,7 @@ const MainScreen: React.FC = () => {
       } else {
         // 데스크톱에서 클립보드에 복사
         await navigator.clipboard.writeText(googleMapsUrl);
-        alert("Google Maps 링크가 클립보드에 복사되었습니다!");
+        console.log("Google Maps 링크가 클립보드에 복사되었습니다!");
       }
     } catch (error) {
       console.error("공유 실패:", error);
@@ -716,10 +731,10 @@ const MainScreen: React.FC = () => {
           ? `https://www.google.com/maps/place/?q=place_id:${selectedPlace.placeId}`
           : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedPlace.displayName)}`;
         await navigator.clipboard.writeText(googleMapsUrl);
-        alert("Google Maps 링크가 클립보드에 복사되었습니다!");
+        console.log("Google Maps 링크가 클립보드에 복사되었습니다!");
       } catch (clipboardError) {
         console.error("클립보드 복사 실패:", clipboardError);
-        alert("공유 기능을 사용할 수 없습니다.");
+        console.error("공유 기능을 사용할 수 없습니다.");
       }
     }
   };
@@ -727,12 +742,12 @@ const MainScreen: React.FC = () => {
   // 북마크 토글 기능
   const handleBookmarkToggle = async () => {
     if (!selectedPlace || !address) {
-      alert("지갑을 연결해주세요.");
+      console.log("지갑을 연결해주세요.");
       return;
     }
 
     if (!selectedPlace.placeId) {
-      alert("장소 정보를 가져올 수 없습니다.");
+      console.log("장소 정보를 가져올 수 없습니다.");
       return;
     }
 
@@ -747,7 +762,7 @@ const MainScreen: React.FC = () => {
         // 북마크 해제
         const uuidPlaceId = await placeIdToUUID(placeId);
         await removeBookmark(uuidPlaceId, address);
-        alert("북마크가 해제되었습니다.");
+        console.log("북마크가 해제되었습니다.");
       } else {
         // 장소가 places 테이블에 존재하는지 확인하고 없으면 생성
         const uuidPlaceId = await ensurePlaceExists(
@@ -760,7 +775,7 @@ const MainScreen: React.FC = () => {
 
         // 북마크 추가
         await addBookmark(uuidPlaceId, address);
-        alert("북마크에 추가되었습니다.");
+        console.log("북마크에 추가되었습니다.");
       }
     } catch (error) {
       console.error("북마크 처리 실패:", error);
@@ -768,7 +783,7 @@ const MainScreen: React.FC = () => {
       // 에러 발생 시 원래 상태로 되돌리기
       setIsBookmarked(originalBookmarkState);
 
-      alert("북마크 처리 중 오류가 발생했습니다.");
+      console.error("북마크 처리 중 오류가 발생했습니다.");
     }
   };
 

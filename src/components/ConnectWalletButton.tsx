@@ -25,6 +25,15 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
   // ** 자동 로그인 시도 및 사용자 등록 **
   useEffect(() => {
     const tryAutoConnect = async () => {
+      // disconnect 후 5초 이내인지 확인
+      const disconnectTime = localStorage.getItem("favoreat_disconnect_time");
+      if (disconnectTime) {
+        const timeDiff = Date.now() - parseInt(disconnectTime);
+        if (timeDiff < 5000) {
+          return;
+        }
+      }
+
       // Farcaster 환경에서만 자동 연결 시도
       if (!isConnected && !isReownConnected) {
         try {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAppKitAccount } from "@reown/appkit/react";
+import { useAccount } from "wagmi";
 import {
   addBookmark,
   removeBookmark,
@@ -61,7 +62,11 @@ const StoreCard: React.FC<StoreCardProps> = ({
   bookmarked,
   onViewDetails,
 }) => {
-  const { address } = useAppKitAccount();
+  const { address: appKitAddress } = useAppKitAccount();
+  const { address: wagmiAddress } = useAccount();
+
+  // Farcaster 자동 로그인과 일반 로그인 모두 지원
+  const address = wagmiAddress || appKitAddress;
   const [isBookmarked, setIsBookmarked] = useState<boolean>(
     bookmarked || false
   );
@@ -99,7 +104,7 @@ const StoreCard: React.FC<StoreCardProps> = ({
   // 북마크 토글 핸들러
   const handleBookmarkToggle = async () => {
     if (!placeId || !address) {
-      alert("지갑을 연결해주세요.");
+      console.log("지갑을 연결해주세요.");
       return;
     }
 

@@ -8,9 +8,9 @@ export class ApiTester {
     if (!address) return;
     try {
       await ensureUserWithWallet(address);
-      alert("유저 등록 성공!");
+      console.log("유저 등록 성공!");
     } catch (error) {
-      alert("유저 등록 실패: " + error);
+      console.error("유저 등록 실패: " + error);
     }
   }
 
@@ -70,9 +70,9 @@ export class ApiTester {
       // 이미지 업로드
       await uploadReviewPhoto({ walletAddress: address, reviewId: review.id, file: image1 });
       await uploadReviewPhoto({ walletAddress: address, reviewId: review.id, file: image2 });
-      alert("리뷰 생성 성공: " + review.id);
+      console.log("리뷰 생성 성공: " + review.id);
     } catch (error) {
-      alert("리뷰 생성 실패: " + error);
+      console.error("리뷰 생성 실패: " + error);
     }
   }
 
@@ -95,9 +95,9 @@ export class ApiTester {
       if (placeError) throw placeError;
 
       await addBookmark(place.id, address);
-      alert("북마크 추가 성공!");
+      console.log("북마크 추가 성공!");
     } catch (error) {
-      alert("북마크 실패: " + error);
+      console.error("북마크 실패: " + error);
     }
   }
 }
@@ -112,11 +112,11 @@ export async function testLoadImages() {
     // 첫 번째 리뷰의 이미지 URL들 출력
     if (reviews.length > 0 && reviews[0].photos.length > 0) {
       const imageUrls = reviews[0].photos.map((photo: { url: string }) => photo.url);
-      alert(`첫 번째 리뷰 이미지 URL들:\n${imageUrls.join("\n")}`);
+      console.log(`첫 번째 리뷰 이미지 URL들:\n${imageUrls.join("\n")}`);
     } else {
-      alert("이미지가 있는 리뷰가 없습니다.");
+      console.log("이미지가 있는 리뷰가 없습니다.");
     }
   } catch (error) {
-    alert("이미지 로드 실패: " + error);
+    console.error("이미지 로드 실패: " + error);
   }
 }

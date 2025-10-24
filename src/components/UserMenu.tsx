@@ -128,10 +128,13 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
     // SDK Context 초기화
     setSdkContext(null);
 
+    // 자동 로그인 방지를 위한 플래그 설정 (5초간)
+    localStorage.setItem("favoreat_disconnect_time", Date.now().toString());
+
     onClose();
 
-    // 페이지 새로고침 후 /app으로 이동
-    window.location.href = "/app";
+    // React Router를 사용하여 라우팅 (페이지 새로고침 없이)
+    navigate("/app");
   };
 
   const handleHowToEarn = () => {
