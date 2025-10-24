@@ -1110,7 +1110,11 @@ const StoreDetailScreen: React.FC = () => {
                     }}
                     className="flex items-center gap-1 text-gray-500 hover:text-red-500 transition-colors"
                   >
-                    <span className="text-sm">❤️</span>
+                    <img
+                      src="/icons/thumbs-up.svg"
+                      alt="좋아요"
+                      className="w-4 h-4"
+                    />
                     <span className="text-xs">{review.like_count}</span>
                   </button>
                 )}

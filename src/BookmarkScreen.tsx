@@ -403,7 +403,14 @@ const BookmarkScreen: React.FC = () => {
                         </span>
                       ))}
                     </div>
-                    <span>❤️ {review.like_count}</span>
+                    <div className="flex justify-center items-center gap-1">
+                      <img
+                        src="/icons/thumbs-up.svg"
+                        alt="좋아요"
+                        className="w-4 h-4"
+                      />
+                      <span className="text-xs">{review.like_count}</span>
+                    </div>
                   </div>
                 </div>
               </div>
