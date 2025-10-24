@@ -147,201 +147,256 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
   useEffect(() => {
     const loadGoogleMapsScript = () => {
       return new Promise<void>((resolve, reject) => {
+        // 이미 로드되어 있는지 확인
         if (typeof google === "object" && google.maps) {
+          console.log("Google Maps API 이미 로드됨");
           resolve();
           return;
         }
+
+        // 기존 스크립트가 있는지 확인
+        const existingScript = document.querySelector(
+          'script[src*="maps.googleapis.com"]'
+        );
+        if (existingScript) {
+          console.log("기존 Google Maps 스크립트 발견, 제거 후 재로드");
+          existingScript.remove();
+        }
+
         const script = document.createElement("script");
         const apiKey = import.meta.env.VITE_GOOGLE_MAP_API_KEY;
         // ✅ places 추가 (검색/자동완성/Place Details 위해 필수)
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker,places&language=en&region=US`;
         script.async = true;
-        script.onerror = () =>
+        script.onerror = () => {
+          console.error("Google Maps 스크립트 로드 실패");
           reject(new Error("Google Maps 스크립트 로드 실패"));
-        script.onload = () => resolve();
+        };
+        script.onload = () => {
+          console.log("Google Maps API 로드 완료");
+          resolve();
+        };
         document.head.appendChild(script);
       });
     };
 
     async function initMapOnce() {
-      await loadGoogleMapsScript();
+      try {
+        console.log("지도 초기화 시작");
+        await loadGoogleMapsScript();
 
-      // 기본 위치 (서울 시청)
-      let position = { lat: 37.5665, lng: 126.978 };
-
-      if ("geolocation" in navigator) {
-        try {
-          const pos = await new Promise<GeolocationPosition>(
-            (resolve, reject) =>
-              navigator.geolocation.getCurrentPosition(resolve, reject)
+        // Google Maps API가 완전히 로드될 때까지 대기
+        let retryCount = 0;
+        const maxRetries = 10;
+        while (retryCount < maxRetries) {
+          if (
+            typeof google === "object" &&
+            google.maps &&
+            typeof google.maps.importLibrary === "function"
+          ) {
+            console.log("Google Maps API 로드 확인됨");
+            break;
+          }
+          console.log(
+            `Google Maps API 로드 대기 중... (${retryCount + 1}/${maxRetries})`
           );
-          position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        } catch (e) {
-          console.warn("위치 정보를 가져오지 못했습니다:", e);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          retryCount++;
         }
-      }
 
-      const { Map } = (await google.maps.importLibrary("maps")) as any;
-      const { AdvancedMarkerElement, PinElement } =
-        (await google.maps.importLibrary("marker")) as any;
-
-      // mapId는 API KEY 그대로 사용 (요청사항 유지)
-      const gMap = new Map(mapDivRef.current as HTMLElement, {
-        center: position,
-        zoom: 18,
-        mapId: import.meta.env.VITE_GOOGLE_MAP_API_KEY,
-        mapTypeControl: false,
-        fullscreenControl: false,
-        streetViewControl: false,
-        cameraControl: false,
-        gestureHandling: "greedy",
-      });
-      gMapRef.current = gMap;
-
-      const pin = new PinElement({
-        background: "#F97316",
-        borderColor: "#FFFFFF",
-        glyphColor: "#FFFFFF",
-      });
-
-      // 최초 1회 현재 위치에 마커 생성
-      markerRef.current = new AdvancedMarkerElement({
-        map: gMap,
-        position,
-        title: "현재 위치",
-        content: pin.element,
-      });
-
-      // 지도 클릭: 마커만 이동(지도 중심은 그대로 유지), 상세 조회 + 이미지 프리로드 후 부모 콜백
-      gMap.addListener("click", async (e: any) => {
-        if (!e.placeId) return;
-        e.stop();
-
-        const reqId = ++latestReqId.current;
-        try {
-          const details = await fetchPlaceDetails(e.placeId);
-
-          // 먼저 프리로드
-          if (details.photos?.length) {
-            await preloadImages(details.photos);
-          }
-
-          // 최신 클릭이 아니면 무시 (레이스 컨디션 방지)
-          if (reqId !== latestReqId.current) return;
-
-          // 마커 위치 이동 (지도 중심은 유지)
-          markerRef.current?.setPosition?.(e.latLng);
-
-          // 부모로 전달 (이미지 캐시에 올라간 상태)
-          onPlaceSelectedRef.current?.(details);
-        } catch (err) {
-          console.error(err);
+        if (retryCount >= maxRetries) {
+          throw new Error("Google Maps API 로드 시간 초과");
         }
-      });
 
-      // 🔸 검색 선택(메인에서 발생) → 지도 이동을 위한 커스텀 이벤트 리스너
-      const handlePanToPlaceId = async (evt: Event) => {
-        const ev = evt as CustomEvent<{ placeId: string }>;
-        const placeId = ev.detail?.placeId;
-        if (!placeId) return;
+        // 기본 위치 (서울 시청)
+        let position = { lat: 37.5665, lng: 126.978 };
 
-        try {
-          const { Place } = (await google.maps.importLibrary("places")) as any;
-          const p = new Place({ id: placeId });
-          await p.fetchFields({
-            fields: [
-              "location",
-              "photos",
-              "displayName",
-              "rating",
-              "userRatingCount",
-            ],
-          });
-
-          const loc = p.location;
-          if (loc) {
-            const latLng = { lat: loc.lat(), lng: loc.lng() };
-
-            // ✅ 지도/핀 이동 (기존 코드 유지)
-            gMapRef.current?.panTo?.(latLng);
-            gMapRef.current?.setZoom?.(18);
-            markerRef.current?.setPosition?.(latLng);
-
-            // ✅ 역지오코딩으로 City/Town 갱신 추가
-            const geocoder = new google.maps.Geocoder();
-            geocoder.geocode(
-              { location: latLng },
-              (results: any, status: any) => {
-                if (status === "OK" && results?.[0]) {
-                  const comps = results[0].address_components;
-                  let city = "",
-                    town = "";
-                  comps.forEach((c: any) => {
-                    if (c.types.includes("country")) {
-                      city = c.long_name;
-                    }
-                    if (
-                      c.types.includes("locality") ||
-                      c.types.includes("sublocality")
-                    ) {
-                      town = c.long_name;
-                    }
-                  });
-                  onLocationResolvedRef.current(city, town); // ← 좌측 라벨 갱신
-                }
-              }
+        if ("geolocation" in navigator) {
+          try {
+            const pos = await new Promise<GeolocationPosition>(
+              (resolve, reject) =>
+                navigator.geolocation.getCurrentPosition(resolve, reject)
             );
+            position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            console.log("현재 위치 가져오기 성공:", position);
+          } catch (e) {
+            console.warn("위치 정보를 가져오지 못했습니다:", e);
           }
-
-          const photoURLs: string[] =
-            p.photos?.map((ph: any) => ph.getURI({ maxHeight: 400 })) || [];
-          if (photoURLs.length) await preloadImages(photoURLs);
-
-          onPlaceSelectedRef.current?.({
-            displayName: p.displayName ?? "",
-            photos: photoURLs,
-            rating: p.rating ?? undefined,
-            userRatingCount: p.userRatingCount ?? undefined,
-          });
-        } catch (e) {
-          console.error(e);
         }
-      };
 
-      window.addEventListener(
-        "fe:panToPlaceId",
-        handlePanToPlaceId as EventListener
-      );
+        console.log("Google Maps 라이브러리 import 시작");
+        const { Map } = (await google.maps.importLibrary("maps")) as any;
+        const { AdvancedMarkerElement, PinElement } =
+          (await google.maps.importLibrary("marker")) as any;
+        console.log("Google Maps 라이브러리 import 완료");
 
-      // 주소 -> 도시/동네 정보 콜백
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ location: position }, (results: any, status: any) => {
-        if (status === "OK" && results[0]) {
-          const components = results[0].address_components;
-          let city = "",
-            town = "";
-          components.forEach((c: any) => {
-            if (c.types.includes("country")) {
-              city = c.long_name;
+        // mapId는 API KEY 그대로 사용 (요청사항 유지)
+        const gMap = new Map(mapDivRef.current as HTMLElement, {
+          center: position,
+          zoom: 18,
+          mapId: import.meta.env.VITE_GOOGLE_MAP_API_KEY,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          streetViewControl: false,
+          cameraControl: false,
+          gestureHandling: "greedy",
+        });
+        gMapRef.current = gMap;
+
+        const pin = new PinElement({
+          background: "#F97316",
+          borderColor: "#FFFFFF",
+          glyphColor: "#FFFFFF",
+        });
+
+        // 최초 1회 현재 위치에 마커 생성
+        markerRef.current = new AdvancedMarkerElement({
+          map: gMap,
+          position,
+          title: "현재 위치",
+          content: pin.element,
+        });
+
+        // 지도 클릭: 마커만 이동(지도 중심은 그대로 유지), 상세 조회 + 이미지 프리로드 후 부모 콜백
+        gMap.addListener("click", async (e: any) => {
+          if (!e.placeId) return;
+          e.stop();
+
+          const reqId = ++latestReqId.current;
+          try {
+            const details = await fetchPlaceDetails(e.placeId);
+
+            // 먼저 프리로드
+            if (details.photos?.length) {
+              await preloadImages(details.photos);
             }
-            if (
-              c.types.includes("locality") ||
-              c.types.includes("sublocality")
-            ) {
-              town = c.long_name;
-            }
-          });
-          onLocationResolvedRef.current(city, town);
-        }
-      });
 
-      // 클린업
-      return () => {
-        window.removeEventListener(
+            // 최신 클릭이 아니면 무시 (레이스 컨디션 방지)
+            if (reqId !== latestReqId.current) return;
+
+            // 마커 위치 이동 (지도 중심은 유지)
+            markerRef.current?.setPosition?.(e.latLng);
+
+            // 부모로 전달 (이미지 캐시에 올라간 상태)
+            onPlaceSelectedRef.current?.(details);
+          } catch (err) {
+            console.error(err);
+          }
+        });
+
+        // 🔸 검색 선택(메인에서 발생) → 지도 이동을 위한 커스텀 이벤트 리스너
+        const handlePanToPlaceId = async (evt: Event) => {
+          const ev = evt as CustomEvent<{ placeId: string }>;
+          const placeId = ev.detail?.placeId;
+          if (!placeId) return;
+
+          try {
+            const { Place } = (await google.maps.importLibrary(
+              "places"
+            )) as any;
+            const p = new Place({ id: placeId });
+            await p.fetchFields({
+              fields: [
+                "location",
+                "photos",
+                "displayName",
+                "rating",
+                "userRatingCount",
+              ],
+            });
+
+            const loc = p.location;
+            if (loc) {
+              const latLng = { lat: loc.lat(), lng: loc.lng() };
+
+              // ✅ 지도/핀 이동 (기존 코드 유지)
+              gMapRef.current?.panTo?.(latLng);
+              gMapRef.current?.setZoom?.(18);
+              markerRef.current?.setPosition?.(latLng);
+
+              // ✅ 역지오코딩으로 City/Town 갱신 추가
+              const geocoder = new google.maps.Geocoder();
+              geocoder.geocode(
+                { location: latLng },
+                (results: any, status: any) => {
+                  if (status === "OK" && results?.[0]) {
+                    const comps = results[0].address_components;
+                    let city = "",
+                      town = "";
+                    comps.forEach((c: any) => {
+                      if (c.types.includes("country")) {
+                        city = c.long_name;
+                      }
+                      if (
+                        c.types.includes("locality") ||
+                        c.types.includes("sublocality")
+                      ) {
+                        town = c.long_name;
+                      }
+                    });
+                    onLocationResolvedRef.current(city, town); // ← 좌측 라벨 갱신
+                  }
+                }
+              );
+            }
+
+            const photoURLs: string[] =
+              p.photos?.map((ph: any) => ph.getURI({ maxHeight: 400 })) || [];
+            if (photoURLs.length) await preloadImages(photoURLs);
+
+            onPlaceSelectedRef.current?.({
+              displayName: p.displayName ?? "",
+              photos: photoURLs,
+              rating: p.rating ?? undefined,
+              userRatingCount: p.userRatingCount ?? undefined,
+            });
+          } catch (e) {
+            console.error(e);
+          }
+        };
+
+        window.addEventListener(
           "fe:panToPlaceId",
           handlePanToPlaceId as EventListener
         );
-      };
+
+        // 주소 -> 도시/동네 정보 콜백
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode(
+          { location: position },
+          (results: any, status: any) => {
+            if (status === "OK" && results[0]) {
+              const components = results[0].address_components;
+              let city = "",
+                town = "";
+              components.forEach((c: any) => {
+                if (c.types.includes("country")) {
+                  city = c.long_name;
+                }
+                if (
+                  c.types.includes("locality") ||
+                  c.types.includes("sublocality")
+                ) {
+                  town = c.long_name;
+                }
+              });
+              onLocationResolvedRef.current(city, town);
+            }
+          }
+        );
+
+        // 클린업
+        return () => {
+          window.removeEventListener(
+            "fe:panToPlaceId",
+            handlePanToPlaceId as EventListener
+          );
+        };
+      } catch (error) {
+        console.error("지도 초기화 실패:", error);
+        // 지도 초기화 실패 시 사용자에게 알림
+        alert("지도를 불러올 수 없습니다. 페이지를 새로고침해주세요.");
+      }
     }
 
     // 최초 1회만
