@@ -308,80 +308,64 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
         const handlePanToPlaceId = async (evt: Event) => {
           const ev = evt as CustomEvent<{ placeId: string }>;
           const placeId = ev.detail?.placeId;
+          console.log("🔍 검색 결과 선택:", { placeId, detail: ev.detail });
           if (!placeId) return;
 
           try {
-            // 기존 Places API 사용 (비용 절약)
-            const service = new google.maps.places.PlacesService(
-              document.createElement("div")
-            );
+            // 검색 결과에서도 fetchPlaceDetails 함수 사용 (완전한 정보 가져오기)
+            try {
+              const details = await fetchPlaceDetails(placeId);
+              console.log(
+                "🔍 검색 장소 상세 정보 (fetchPlaceDetails):",
+                details
+              );
 
-            service.getDetails(
-              {
-                placeId: placeId,
-                fields: [
-                  "name",
-                  "photos",
-                  "rating",
-                  "user_ratings_total",
-                  "geometry",
-                ],
-              },
-              (place, status) => {
-                if (
-                  status === google.maps.places.PlacesServiceStatus.OK &&
-                  place
-                ) {
-                  const loc = place.geometry?.location;
-                  if (loc) {
-                    const latLng = { lat: loc.lat(), lng: loc.lng() };
+              // 지도/핀 이동
+              if (details.latitude && details.longitude) {
+                const latLng = {
+                  lat: details.latitude,
+                  lng: details.longitude,
+                };
+                gMapRef.current?.panTo(latLng);
+                gMapRef.current?.setZoom(18);
+                markerRef.current?.setPosition(latLng);
 
-                    // ✅ 지도/핀 이동 (기존 코드 유지)
-                    gMapRef.current?.panTo(latLng);
-                    gMapRef.current?.setZoom(18);
-                    markerRef.current?.setPosition(latLng);
-
-                    // ✅ 역지오코딩으로 City/Town 갱신 추가
-                    const geocoder = new google.maps.Geocoder();
-                    geocoder.geocode(
-                      { location: latLng },
-                      (results: any, status: any) => {
-                        if (status === "OK" && results?.[0]) {
-                          const comps = results[0].address_components;
-                          let city = "",
-                            town = "";
-                          comps.forEach((c: any) => {
-                            if (c.types.includes("country")) {
-                              city = c.long_name;
-                            }
-                            if (
-                              c.types.includes("locality") ||
-                              c.types.includes("sublocality")
-                            ) {
-                              town = c.long_name;
-                            }
-                          });
-                          onLocationResolvedRef.current(city, town); // ← 좌측 라벨 갱신
+                // 역지오코딩으로 City/Town 갱신
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode(
+                  { location: latLng },
+                  (results: any, status: any) => {
+                    if (status === "OK" && results?.[0]) {
+                      const comps = results[0].address_components;
+                      let city = "",
+                        town = "";
+                      comps.forEach((c: any) => {
+                        if (c.types.includes("country")) {
+                          city = c.long_name;
                         }
-                      }
-                    );
+                        if (
+                          c.types.includes("locality") ||
+                          c.types.includes("sublocality")
+                        ) {
+                          town = c.long_name;
+                        }
+                      });
+                      onLocationResolvedRef.current(city, town);
+                    }
                   }
-
-                  const photoURLs: string[] =
-                    place.photos?.map((ph: any) =>
-                      ph.getUrl({ maxHeight: 400 })
-                    ) || [];
-                  if (photoURLs.length) preloadImages(photoURLs);
-
-                  onPlaceSelectedRef.current?.({
-                    displayName: place.name ?? "",
-                    photos: photoURLs,
-                    rating: place.rating ?? undefined,
-                    userRatingCount: place.user_ratings_total ?? undefined,
-                  });
-                }
+                );
               }
-            );
+
+              // 이미지 프리로드
+              if (details.photos?.length) {
+                await preloadImages(details.photos);
+              }
+
+              // 완전한 장소 정보 전달
+              onPlaceSelectedRef.current?.(details);
+            } catch (error) {
+              console.error("검색 장소 상세 정보 가져오기 실패:", error);
+            }
           } catch (e) {
             console.error(e);
           }
@@ -741,13 +725,18 @@ const MainScreen: React.FC = () => {
 
   // 북마크 토글 기능
   const handleBookmarkToggle = async () => {
+    console.log("🔖 북마크 토글 시도:", { selectedPlace, address });
+
     if (!selectedPlace || !address) {
       console.log("지갑을 연결해주세요.");
       return;
     }
 
     if (!selectedPlace.placeId) {
-      console.log("장소 정보를 가져올 수 없습니다.");
+      console.log(
+        "장소 정보를 가져올 수 없습니다. selectedPlace:",
+        selectedPlace
+      );
       return;
     }
 
@@ -997,6 +986,10 @@ const MainScreen: React.FC = () => {
                 <button
                   key={p.place_id}
                   onClick={() => {
+                    console.log("🔍 검색 결과 클릭:", {
+                      placeId: p.place_id,
+                      prediction: p,
+                    });
                     window.dispatchEvent(
                       new CustomEvent("fe:panToPlaceId", {
                         detail: { placeId: p.place_id },
