@@ -2,9 +2,9 @@ const ROOT_URL = process.env.VITE_PUBLIC_URL || (process.env.VERCEL_PROJECT_PROD
 
 export const minikitConfig = {
     accountAssociation: { // this will be added in step 5
-      "header": "",
-      "payload": "",
-      "signature": ""
+      "header": process.env.VITE_HEADER,
+      "payload": process.env.VITE_PAYLOAD,
+      "signature": process.env.VITE_SIGNATURE
     },
     miniapp: {
       version: "1",
