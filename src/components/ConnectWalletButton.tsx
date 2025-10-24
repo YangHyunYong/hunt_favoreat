@@ -40,18 +40,6 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
       }
     };
 
-    // 지갑 연결 시 사용자 자동 등록
-    const registerUser = async () => {
-      if (isWalletConnected && walletAddress) {
-        try {
-          await ensureUserWithWallet(walletAddress);
-          console.log("✅ User:", walletAddress);
-        } catch (error) {
-          console.error("❌ User registration failed:", error);
-        }
-      }
-    };
-
     // SDK Context 로드
     const loadSdkContext = async () => {
       try {

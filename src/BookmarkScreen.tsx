@@ -147,25 +147,6 @@ const BookmarkScreen: React.FC = () => {
     }
   };
 
-  const calculateDistance = (
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number
-  ): number => {
-    const R = 6371000; // 지구 반지름 (미터)
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const la1 = toRad(lat1);
-    const la2 = toRad(lat2);
-    const sinDLat = Math.sin(dLat / 2);
-    const sinDLng = Math.sin(dLng / 2);
-    const h =
-      sinDLat * sinDLat + Math.cos(la1) * Math.cos(la2) * sinDLng * sinDLng;
-    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-200 flex items-center justify-center">
