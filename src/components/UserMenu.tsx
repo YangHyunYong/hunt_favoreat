@@ -134,7 +134,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
     onClose();
 
     // React Router를 사용하여 라우팅 (페이지 새로고침 없이)
-    navigate("/app");
+    navigate("/");
   };
 
   const handleHowToEarn = () => {
