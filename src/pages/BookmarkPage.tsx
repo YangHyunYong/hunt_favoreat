@@ -11,6 +11,55 @@ import Header from "../components/Header";
 import ConnectWalletButton from "../components/ConnectWalletButton";
 import UserMenu from "../components/UserMenu";
 
+// MainPage.tsx와 동일한 fetchPlaceDetails 함수
+export async function fetchPlaceDetails(placeId: string): Promise<{
+  displayName: string;
+  photos: string[];
+  rating?: number;
+  userRatingCount?: number;
+  placeId?: string;
+  latitude?: number;
+  longitude?: number;
+}> {
+  if (!google || !google.maps) {
+    throw new Error("Google Maps JS SDK is not loaded yet.");
+  }
+
+  // 기존 Places API 사용 (비용 절약)
+  const service = new google.maps.places.PlacesService(
+    document.createElement("div")
+  );
+
+  return new Promise((resolve, reject) => {
+    service.getDetails(
+      {
+        placeId: placeId,
+        fields: ["name", "photos", "rating", "user_ratings_total", "geometry"],
+      },
+      (place, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+          const photos: string[] =
+            place.photos?.map((photo: any) =>
+              photo.getUrl({ maxHeight: 400 })
+            ) || [];
+
+          resolve({
+            displayName: place.name || "",
+            photos,
+            rating: place.rating || undefined,
+            userRatingCount: place.user_ratings_total || undefined,
+            placeId: placeId,
+            latitude: place.geometry?.location?.lat() || undefined,
+            longitude: place.geometry?.location?.lng() || undefined,
+          });
+        } else {
+          reject(new Error(`Places API error: ${status}`));
+        }
+      }
+    );
+  });
+}
+
 interface BookmarkData {
   id: string;
   name: string;
@@ -27,6 +76,7 @@ interface BookmarkData {
   }[];
   totalReviews: number;
   averageRating: number;
+  placeImage?: string; // Google Places API에서 가져온 가게 이미지
 }
 
 interface ReviewData {
@@ -64,6 +114,42 @@ const BookmarkScreen: React.FC = () => {
   const isWalletConnected = isConnected || isReownConnected;
   const walletAddress = isConnected ? address : reownAddress;
 
+  // 북마크 이미지 로드 함수
+  const loadBookmarkImages = async (bookmarks: BookmarkData[]) => {
+    const bookmarksWithImages = await Promise.all(
+      bookmarks.map(async (bookmark) => {
+        try {
+          // places 테이블에서 google_place_id 조회
+          const { data: placeData, error: placeError } = await supabase
+            .from("places")
+            .select("google_place_id")
+            .eq("id", bookmark.id)
+            .single();
+
+          if (placeError || !placeData?.google_place_id) {
+            console.log(`북마크 ${bookmark.name}의 google_place_id 없음`);
+            return bookmark;
+          }
+
+          // Google Places API로 이미지 가져오기
+          const placeDetails = await fetchPlaceDetails(
+            placeData.google_place_id
+          );
+
+          return {
+            ...bookmark,
+            placeImage: placeDetails.photos[0] || undefined,
+          };
+        } catch (error) {
+          console.error(`북마크 ${bookmark.name} 이미지 로드 실패:`, error);
+          return bookmark;
+        }
+      })
+    );
+
+    return bookmarksWithImages;
+  };
+
   useEffect(() => {
     const loadData = async () => {
       if (isWalletConnected && walletAddress) {
@@ -76,7 +162,10 @@ const BookmarkScreen: React.FC = () => {
           console.log("북마크 데이터:", bookmarkData);
           console.log("리뷰 데이터:", reviewData);
           console.log("리뷰 데이터 개수:", reviewData?.length || 0);
-          setBookmarks(bookmarkData);
+
+          // 북마크 이미지 로드
+          const bookmarksWithImages = await loadBookmarkImages(bookmarkData);
+          setBookmarks(bookmarksWithImages);
           setReviews(reviewData);
         } catch (error) {
           console.error("데이터 로드 실패:", error);
@@ -95,18 +184,67 @@ const BookmarkScreen: React.FC = () => {
     navigate(-1);
   };
 
-  const handleBookmarkClick = (bookmark: BookmarkData) => {
-    const slug = bookmark.name
-      .toLowerCase()
-      .replace(/[^a-z0-9가-힣]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    navigate(`/store/${slug}`, {
-      state: {
-        displayName: bookmark.name,
-        placeId: bookmark.id,
-        distanceMeters: undefined,
-      },
-    });
+  const handleBookmarkClick = async (bookmark: BookmarkData) => {
+    try {
+      // places 테이블에서 google_place_id 조회
+      const { data: placeData, error: placeError } = await supabase
+        .from("places")
+        .select("google_place_id")
+        .eq("id", bookmark.id)
+        .single();
+
+      if (placeError || !placeData?.google_place_id) {
+        console.log(`북마크 ${bookmark.name}의 google_place_id 없음`);
+        // 기본 데이터로 이동
+        const slug = bookmark.name
+          .toLowerCase()
+          .replace(/[^a-z0-9가-힣]+/g, "-")
+          .replace(/^-+|-+$/g, "");
+        navigate(`/store/${slug}`, {
+          state: {
+            displayName: bookmark.name,
+            placeId: bookmark.id,
+            distanceMeters: undefined,
+          },
+        });
+        return;
+      }
+
+      // Google Places API로 상세 정보 가져오기
+      const placeDetails = await fetchPlaceDetails(placeData.google_place_id);
+
+      const slug = bookmark.name
+        .toLowerCase()
+        .replace(/[^a-z0-9가-힣]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+
+      navigate(`/store/${slug}`, {
+        state: {
+          displayName: placeDetails.displayName || bookmark.name,
+          placeId: placeData.google_place_id,
+          photos: placeDetails.photos,
+          rating: placeDetails.rating,
+          userRatingCount: placeDetails.userRatingCount,
+          latitude: placeDetails.latitude,
+          longitude: placeDetails.longitude,
+          distanceMeters: undefined, // 거리는 StoreDetailPage에서 계산
+        },
+      });
+    } catch (error) {
+      console.error("북마크 클릭 시 데이터 로드 실패:", error);
+      // 에러 시 기본 데이터로 이동
+      const slug = bookmark.name
+        .toLowerCase()
+        .replace(/[^a-z0-9가-힣]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      navigate(`/store/${slug}`, {
+        state: {
+          displayName: bookmark.name,
+          placeId: bookmark.id,
+          distanceMeters: undefined,
+        },
+      });
+    }
   };
 
   const handleRemoveBookmark = async (placeId: string, e: React.MouseEvent) => {
@@ -269,9 +407,24 @@ const BookmarkScreen: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* 리뷰 이미지들 표시 */}
-                  {bookmark.reviews.length > 0 &&
-                  bookmark.reviews[0].photos.length > 0 ? (
+                  {/* 가게 이미지 표시 */}
+                  {bookmark.placeImage ? (
+                    <div className="h-16 rounded-lg mb-4 overflow-hidden">
+                      <img
+                        src={bookmark.placeImage}
+                        alt={`${bookmark.name} 이미지`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error(
+                            "가게 이미지 로드 실패:",
+                            bookmark.placeImage
+                          );
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    </div>
+                  ) : bookmark.reviews.length > 0 &&
+                    bookmark.reviews[0].photos.length > 0 ? (
                     <div className="h-16 rounded-lg mb-4 flex gap-1">
                       {bookmark.reviews[0].photos
                         .slice(0, 2)
@@ -332,19 +485,74 @@ const BookmarkScreen: React.FC = () => {
             reviews.map((review) => (
               <div
                 key={review.id}
-                onClick={() => {
+                onClick={async () => {
                   if (review.place) {
-                    const slug = review.place.name
-                      .toLowerCase()
-                      .replace(/[^a-z0-9가-힣]+/g, "-")
-                      .replace(/^-+|-+$/g, "");
-                    navigate(`/store/${slug}`, {
-                      state: {
-                        displayName: review.place.name,
-                        placeId: review.place_id,
-                        distanceMeters: undefined,
-                      },
-                    });
+                    try {
+                      // places 테이블에서 google_place_id 조회
+                      const { data: placeData, error: placeError } =
+                        await supabase
+                          .from("places")
+                          .select("google_place_id")
+                          .eq("id", review.place_id)
+                          .single();
+
+                      if (placeError || !placeData?.google_place_id) {
+                        console.log(
+                          `리뷰 ${review.place.name}의 google_place_id 없음`
+                        );
+                        // 기본 데이터로 이동
+                        const slug = review.place.name
+                          .toLowerCase()
+                          .replace(/[^a-z0-9가-힣]+/g, "-")
+                          .replace(/^-+|-+$/g, "");
+                        navigate(`/store/${slug}`, {
+                          state: {
+                            displayName: review.place.name,
+                            placeId: review.place_id,
+                            distanceMeters: undefined,
+                          },
+                        });
+                        return;
+                      }
+
+                      // Google Places API로 상세 정보 가져오기
+                      const placeDetails = await fetchPlaceDetails(
+                        placeData.google_place_id
+                      );
+
+                      const slug = review.place.name
+                        .toLowerCase()
+                        .replace(/[^a-z0-9가-힣]+/g, "-")
+                        .replace(/^-+|-+$/g, "");
+
+                      navigate(`/store/${slug}`, {
+                        state: {
+                          displayName:
+                            placeDetails.displayName || review.place.name,
+                          placeId: placeData.google_place_id,
+                          photos: placeDetails.photos,
+                          rating: placeDetails.rating,
+                          userRatingCount: placeDetails.userRatingCount,
+                          latitude: placeDetails.latitude,
+                          longitude: placeDetails.longitude,
+                          distanceMeters: undefined, // 거리는 StoreDetailPage에서 계산
+                        },
+                      });
+                    } catch (error) {
+                      console.error("리뷰 클릭 시 데이터 로드 실패:", error);
+                      // 에러 시 기본 데이터로 이동
+                      const slug = review.place.name
+                        .toLowerCase()
+                        .replace(/[^a-z0-9가-힣]+/g, "-")
+                        .replace(/^-+|-+$/g, "");
+                      navigate(`/store/${slug}`, {
+                        state: {
+                          displayName: review.place.name,
+                          placeId: review.place_id,
+                          distanceMeters: undefined,
+                        },
+                      });
+                    }
                   }
                 }}
                 className="bg-gray-50 rounded-2xl p-4 cursor-pointer hover:bg-gray-100 transition-colors"
