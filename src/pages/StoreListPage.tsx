@@ -158,7 +158,7 @@ const StoreListScreen: React.FC = () => {
         (error) => {
           console.warn("위치 정보를 가져올 수 없습니다:", error);
           // 기본값: 서울시청
-          resolve({ lat: 37.5665, lng: 126.978 });
+          resolve({ lat: 37.37, lng: 126.9562 });
         }
       );
     });
@@ -183,8 +183,7 @@ const StoreListScreen: React.FC = () => {
             );
           } catch (error) {
             console.error("위치 정보 가져오기 실패:", error);
-            userLoc = { lat: 37.5665, lng: 126.978 };
-            console.log("기본 위치 설정: 서울시청");
+            userLoc = { lat: 37.37, lng: 126.9562 };
           }
         }
 

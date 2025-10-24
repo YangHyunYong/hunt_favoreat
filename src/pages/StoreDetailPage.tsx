@@ -293,7 +293,7 @@ const StoreDetailScreen: React.FC = () => {
         (error) => {
           console.warn("위치 정보를 가져올 수 없습니다:", error);
           // 기본값: 서울시청
-          resolve({ lat: 37.5665, lng: 126.978 });
+          resolve({ lat: 37.37, lng: 126.9562 });
         }
       );
     });
@@ -366,8 +366,7 @@ const StoreDetailScreen: React.FC = () => {
       } catch (error) {
         console.error("위치 정보 가져오기 실패:", error);
         // 기본값으로 서울시청 설정
-        setCurrentLocation({ lat: 37.5665, lng: 126.978 });
-        console.log("기본 위치 설정: 서울시청");
+        setCurrentLocation({ lat: 37.37, lng: 126.9562 });
       }
     };
 
@@ -544,8 +543,8 @@ const StoreDetailScreen: React.FC = () => {
           .insert({
             name: displayName,
             address_text: "Unknown Address", // 실제로는 Google Places API에서 가져와야 함
-            latitude: 37.5665, // 기본값
-            longitude: 126.978, // 기본값
+            latitude: 37.37, // 기본값
+            longitude: 126.9562, // 기본값
           })
           .select("id")
           .single();

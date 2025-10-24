@@ -24,8 +24,8 @@ export class ApiTester {
         .insert({
           name: "테스트 카페",
           address_text: "서울시 강남구",
-          latitude: 37.5665,
-          longitude: 126.978,
+          latitude: 37.37,
+          longitude: 126.9562,
         })
         .select("id")
         .single();
