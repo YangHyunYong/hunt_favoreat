@@ -1,117 +1,60 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useAppKitAccount } from "@reown/appkit/react";
+import { sdk } from "@farcaster/frame-sdk";
 import Header from "./components/Header";
 import Rating from "./components/Rating";
-import ActionMenu from "./components/ActionMenu";
 import ConfirmModal from "./components/ConfirmModal";
+import { useFavoreatApi } from "./hooks/useFavoreatApi";
+import ConnectWalletButton from "./components/ConnectWalletButton";
+import UserMenu from "./components/UserMenu";
+
+import {
+  supabase,
+  getReviewsWithImages,
+  addBookmark,
+  removeBookmark,
+  getMyBookmarks,
+  softDeleteReview,
+  ensurePlaceExists,
+  addPointsToUser,
+  addLikeToReview,
+} from "./supabaseClient";
 
 interface PlaceDetailsResult {
   displayName: string;
   photos: string[];
   rating?: number;
   userRatingCount?: number;
+  placeId?: string;
+  distanceMeters?: number; // StoreListScreen에서 전달받은 거리
+  address?: string; // 주소 정보
+  latitude?: number; // 위도
+  longitude?: number; // 경도
 }
 
-const StoreDetailScreen: React.FC = () => {
-  const navigate = useNavigate();
-  const { id } = useParams(); // /store/:displayName
-  const location = useLocation();
-  const place = (location.state || {}) as PlaceDetailsResult;
-
-  // 기본 데이터 설정 (state 없을 경우 대비)
-  const displayName = place.displayName || id || "Unknown Store";
-  const heroImage = place.photos?.[0] || "/sample/burger-hero.jpg";
-  const img1 = place.photos?.[0] || "/sample/burger.jpg";
-  const img2 = place.photos?.[1] || "/sample/bibimbap.jpg";
-  const rating = place.rating ?? 4;
-  const ratingCount = place.userRatingCount ?? 12;
-
-  // 내가 남길 별점 (0.5 단위)
-  const [myRating, setMyRating] = useState<number>(0);
-  // 리뷰 작성 UI (확장형)
-  const [isReviewOpen, setIsReviewOpen] = useState(false);
-  const [isBookmarked, setIsBookmarked] = useState<boolean>(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuWrapRef = useRef<HTMLDivElement | null>(null);
-  const [reviewText, setReviewText] = useState("");
-  const [reviewImages, setReviewImages] = useState<string[]>([]); // object URL 보관
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [showDone, setShowDone] = useState(false);
-
-  const MAX_IMAGES = 2;
-  const MAX_LEN = 400;
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  const openComposer = () => setIsReviewOpen(true);
-
-  const onPickImages = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    const remain = Math.max(0, MAX_IMAGES - reviewImages.length);
-    const selected = Array.from(files).slice(0, remain);
-    const urls = selected.map((f) => URL.createObjectURL(f));
-    setReviewImages((prev) => [...prev, ...urls]);
-    // 같은 파일 다시 선택 가능하도록 초기화
-    e.target.value = "";
-  };
-
-  const removeImage = (index: number) => {
-    setReviewImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (!menuWrapRef.current) return;
-      const target = e.target as Node;
-      if (!menuWrapRef.current.contains(target)) {
-        setIsMenuOpen(false);
+interface ReviewData {
+  id: string;
+  place_id: string;
+  author_wallet: string;
+  rating: number;
+  body: string | null;
+  created_at: string;
+  like_count: number;
+  photos: Array<
+    | string
+    | {
+        id: string;
+        url: string;
+        exif_latitude: number | null;
+        exif_longitude: number | null;
       }
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
+  >;
+}
 
-  const canSubmit = reviewText.trim().length > 0;
-
-  const onSubmitReview = () => {
-    if (!canSubmit) return;
-    // TODO: 서버에 업로드 로직 연결
-    console.log("submit review", {
-      rating: myRating,
-      text: reviewText,
-      images: reviewImages,
-    });
-    // 초기화 및 닫기
-    setIsReviewOpen(false);
-    setReviewText("");
-    setReviewImages([]);
-    if (textAreaRef.current) {
-      textAreaRef.current.style.height = "56px";
-    }
-    setMyRating(0);
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const el = e.target;
-    setReviewText(el.value);
-
-    if (!textAreaRef.current) return;
-    const ta = textAreaRef.current;
-
-    // 현재 보이는 높이보다 내용이 커질 때만 확대 (초기 한 글자 입력 시 '점프' 방지)
-    if (el.scrollHeight > ta.clientHeight) {
-      ta.style.height = "auto";
-      ta.style.height = `${el.scrollHeight}px`;
-    }
-    // 내용이 줄어들어도 높이는 유지 (원하면 줄어들도록 변경 가능)
-  };
-
-  // 히어로 이미지: 없거나 로드 실패 시 placeholder 표시
-  const ImgHeroOrPlaceholder: React.FC<{ src?: string; alt?: string }> = ({
-    src,
-    alt,
-  }) => {
+// 히어로 이미지: 없거나 로드 실패 시 placeholder 표시
+const ImgHeroOrPlaceholder: React.FC<{ src?: string; alt?: string }> =
+  React.memo(({ src, alt }) => {
     const [errored, setErrored] = useState(false);
     if (!src || errored) {
       return (
@@ -133,34 +76,589 @@ const StoreDetailScreen: React.FC = () => {
         onError={() => setErrored(true)}
       />
     );
+  });
+
+const StoreDetailScreen: React.FC = () => {
+  const navigate = useNavigate();
+  const { id } = useParams(); // /store/:displayName
+  const location = useLocation();
+  const place = (location.state || {}) as PlaceDetailsResult;
+  const { address } = useAppKitAccount();
+  const { submitReview } = useFavoreatApi();
+
+  // 기본 데이터 설정 (state 없을 경우 대비)
+  const displayName = place.displayName || id || "Unknown Store";
+  const heroImage = place.photos?.[0] || "/sample/burger-hero.jpg";
+  const rating = place.rating ?? 4;
+  const ratingCount = place.userRatingCount ?? 12;
+
+  // 거리 계산 상태
+  const [distance, setDistance] = useState<number | null>(
+    place.distanceMeters || null
+  );
+
+  // 내가 남길 별점 (0.5 단위)
+  const [myRating, setMyRating] = useState<number>(0);
+  // 리뷰 작성 UI (확장형)
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState<boolean>(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuWrapRef = useRef<HTMLDivElement | null>(null);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewImages, setReviewImages] = useState<string[]>([]); // object URL 보관
+  const [reviewFiles, setReviewFiles] = useState<File[]>([]); // 실제 파일 보관
+
+  // 리뷰 데이터 상태
+  const [reviews, setReviews] = useState<ReviewData[]>([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+  const [currentPlaceId, setCurrentPlaceId] = useState<string | null>(null);
+  const [expandedReviews, setExpandedReviews] = useState<
+    Record<string, boolean>
+  >({});
+
+  // 삭제 확인 모달 상태
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [reviewToDelete, setReviewToDelete] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  // 장소 UUID 상태 (한 번만 생성)
+  const [placeUuid, setPlaceUuid] = useState<string | null>(null);
+
+  // 현재 위치 상태
+  const [currentLocation, setCurrentLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+
+  // UserMenu 상태
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // 장소 UUID 생성 (한 번만 실행)
+  useEffect(() => {
+    const initializePlace = async () => {
+      if (!place.placeId || placeUuid) return; // 이미 생성되었거나 placeId가 없으면 스킵
+
+      try {
+        console.log("장소 UUID 초기화 시작:", place.placeId);
+
+        // placeId가 UUID 형태인지 확인
+        const isUUID =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            place.placeId
+          );
+
+        if (isUUID) {
+          // UUID인 경우 places 테이블에서 해당 ID가 존재하는지 확인
+          console.log("UUID 형태의 placeId 확인:", place.placeId);
+
+          const { data: existingPlace } = await supabase
+            .from("places")
+            .select("id")
+            .eq("id", place.placeId)
+            .single();
+
+          if (existingPlace) {
+            // places 테이블에 존재하는 UUID인 경우 그대로 사용
+            console.log("places 테이블에서 UUID 발견:", place.placeId);
+            setPlaceUuid(place.placeId);
+          } else {
+            // places 테이블에 없는 UUID인 경우 google_place_id로 검색
+            console.log(
+              "places 테이블에 없는 UUID, google_place_id로 검색:",
+              place.placeId
+            );
+
+            const { data: placeByGoogleId } = await supabase
+              .from("places")
+              .select("id")
+              .eq("google_place_id", place.placeId)
+              .single();
+
+            if (placeByGoogleId) {
+              console.log("google_place_id로 장소 발견:", placeByGoogleId.id);
+              setPlaceUuid(placeByGoogleId.id);
+            } else {
+              console.log(
+                "장소를 찾을 수 없음, 기본 UUID 사용:",
+                place.placeId
+              );
+              setPlaceUuid(place.placeId);
+            }
+          }
+        } else {
+          // Google Places API placeId인 경우 ensurePlaceExists 호출
+          const uuid = await ensurePlaceExists(
+            place.placeId,
+            displayName,
+            place.address,
+            place.latitude,
+            place.longitude
+          );
+          setPlaceUuid(uuid);
+        }
+
+        console.log("장소 UUID 초기화 완료:", placeUuid);
+      } catch (error) {
+        console.error("장소 UUID 초기화 실패:", error);
+      }
+    };
+
+    initializePlace();
+  }, [
+    place.placeId,
+    displayName,
+    place.address,
+    place.latitude,
+    place.longitude,
+    placeUuid,
+  ]);
+
+  // placeUuid가 준비되면 리뷰 로드
+  useEffect(() => {
+    if (placeUuid) {
+      loadReviews(placeUuid);
+      setIsLoadingReviews(false);
+    }
+  }, [placeUuid]);
+
+  // placeUuid가 준비되면 북마크 상태 확인
+  useEffect(() => {
+    const checkBookmarkStatus = async () => {
+      if (!address || !placeUuid) return;
+
+      try {
+        const bookmarks = await getMyBookmarks(address);
+        const isBookmarkedInServer = bookmarks.some(
+          (bookmark) => bookmark.place_id === placeUuid
+        );
+        setIsBookmarked(isBookmarkedInServer);
+      } catch (error) {
+        console.error("북마크 상태 조회 실패:", error);
+        setIsBookmarked(false);
+      }
+    };
+
+    if (placeUuid && address) {
+      checkBookmarkStatus();
+    }
+  }, [placeUuid, address]);
+
+  const MAX_IMAGES = 2;
+  const MAX_LEN = 400;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const openComposer = () => setIsReviewOpen(true);
+
+  // 거리 계산 함수 (Haversine formula)
+  const calculateDistance = (
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+  ): number => {
+    const R = 6371000; // 지구 반지름 (미터)
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const la1 = toRad(lat1);
+    const la2 = toRad(lat2);
+    const sinDLat = Math.sin(dLat / 2);
+    const sinDLng = Math.sin(dLng / 2);
+    const h =
+      sinDLat * sinDLat + Math.cos(la1) * Math.cos(la2) * sinDLng * sinDLng;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
   };
+
+  // 현재 위치 가져오기
+  const getCurrentLocation = (): Promise<{ lat: number; lng: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported"));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.warn("위치 정보를 가져올 수 없습니다:", error);
+          // 기본값: 서울시청
+          resolve({ lat: 37.5665, lng: 126.978 });
+        }
+      );
+    });
+  };
+
+  const onPickImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const remain = Math.max(0, MAX_IMAGES - reviewImages.length);
+    const selected = Array.from(files).slice(0, remain);
+
+    // 파일명을 안전한 형태로 변환
+    const safeFiles = selected.map((file) => {
+      const timestamp = Date.now();
+      const extension = file.name.split(".").pop() || "jpg";
+      const safeName = `review-${timestamp}.${extension}`;
+      return new File([file], safeName, { type: file.type });
+    });
+
+    const urls = safeFiles.map((f) => URL.createObjectURL(f));
+    setReviewImages((prev) => [...prev, ...urls]);
+    setReviewFiles((prev) => [...prev, ...safeFiles]);
+    // 같은 파일 다시 선택 가능하도록 초기화
+    e.target.value = "";
+  };
+
+  const removeImage = (index: number) => {
+    setReviewImages((prev) => prev.filter((_, i) => i !== index));
+    setReviewFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedReviews((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // 리뷰 로드 함수
+  const loadReviews = async (placeId: string) => {
+    if (currentPlaceId === placeId) return; // 이미 로드된 장소면 스킵
+
+    setIsLoadingReviews(true);
+    try {
+      const reviewsData = await getReviewsWithImages(placeId);
+      setReviews(reviewsData);
+      setCurrentPlaceId(placeId);
+    } catch (error) {
+      console.error("❌ Failed to load reviews:", error);
+      setReviews([]);
+    } finally {
+      setIsLoadingReviews(false);
+    }
+  };
+
+  // 페이지 로드 시 스크롤을 맨 위로 이동
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // 현재 위치 가져오기 (MainScreen에서 온 경우에만)
+  useEffect(() => {
+    const fetchCurrentLocation = async () => {
+      // StoreListScreen에서 온 경우 (이미 거리가 계산됨)는 스킵
+      if (place.distanceMeters !== undefined) {
+        return;
+      }
+
+      try {
+        const location = await getCurrentLocation();
+        setCurrentLocation(location);
+        console.log("현재 위치 가져오기 성공:", location);
+      } catch (error) {
+        console.error("위치 정보 가져오기 실패:", error);
+        // 기본값으로 서울시청 설정
+        setCurrentLocation({ lat: 37.5665, lng: 126.978 });
+        console.log("기본 위치 설정: 서울시청");
+      }
+    };
+
+    fetchCurrentLocation();
+  }, [place.distanceMeters]);
+
+  // 거리 계산 (MainScreen에서 온 경우)
+  useEffect(() => {
+    const calculateDistanceIfNeeded = () => {
+      console.log("거리 계산 조건 확인:", {
+        placeDistanceMeters: place.distanceMeters,
+        currentLocation,
+        placeLatitude: place.latitude,
+        placeLongitude: place.longitude,
+      });
+
+      // 이미 거리가 있으면 스킵
+      if (place.distanceMeters !== undefined) {
+        return;
+      }
+
+      // 현재 위치가 없으면 스킵
+      if (!currentLocation) {
+        console.log("현재 위치가 없어서 거리 계산 스킵");
+        return;
+      }
+
+      // MainScreen에서 전달받은 좌표 정보 사용
+      const placeLat = place.latitude;
+      const placeLng = place.longitude;
+
+      if (placeLat && placeLng) {
+        try {
+          const calculatedDistance = calculateDistance(
+            currentLocation.lat,
+            currentLocation.lng,
+            placeLat,
+            placeLng
+          );
+          setDistance(calculatedDistance);
+          console.log("거리 계산 완료:", calculatedDistance);
+        } catch (error) {
+          console.warn("거리 계산 실패:", error);
+        }
+      } else {
+        console.log("장소 좌표를 가져올 수 없어서 거리 계산 불가");
+      }
+    };
+
+    calculateDistanceIfNeeded();
+  }, [
+    currentLocation,
+    place.latitude,
+    place.longitude,
+    place.distanceMeters,
+    place.placeId,
+  ]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!menuWrapRef.current) return;
+      const target = e.target as Node;
+      if (!menuWrapRef.current.contains(target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  const canSubmit = reviewText.trim().length > 0;
+
+  // 공유 기능
+  const handleShare = async () => {
+    if (!place) return;
+
+    try {
+      // Google Maps 링크 생성 (placeId 사용)
+      const googleMapsUrl = place.placeId
+        ? `https://www.google.com/maps/place/?q=place_id:${place.placeId}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayName)}`;
+
+      if (navigator.share) {
+        // 모바일에서 네이티브 공유 사용
+        await navigator.share({
+          title: displayName,
+          text: `${displayName} - FavorEat에서 발견한 장소`,
+          url: googleMapsUrl,
+        });
+      } else {
+        // 데스크톱에서 클립보드에 복사
+        await navigator.clipboard.writeText(googleMapsUrl);
+        alert("Google Maps 링크가 클립보드에 복사되었습니다!");
+      }
+    } catch (error) {
+      console.error("공유 실패:", error);
+      // 폴백: 클립보드에 복사
+      try {
+        const googleMapsUrl = place.placeId
+          ? `https://www.google.com/maps/place/?q=place_id:${place.placeId}`
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayName)}`;
+        await navigator.clipboard.writeText(googleMapsUrl);
+        alert("Google Maps 링크가 클립보드에 복사되었습니다!");
+      } catch (clipboardError) {
+        console.error("클립보드 복사 실패:", clipboardError);
+        alert("공유 기능을 사용할 수 없습니다.");
+      }
+    }
+  };
+
+  // 북마크 토글 기능
+  const handleBookmarkToggle = async () => {
+    if (!place || !address) {
+      alert("지갑을 연결해주세요.");
+      return;
+    }
+
+    if (!place.placeId) {
+      alert("장소 정보를 가져올 수 없습니다.");
+      return;
+    }
+
+    const originalBookmarkState = isBookmarked;
+
+    // 즉시 UI 상태 변경 (Optimistic Update)
+    setIsBookmarked(!isBookmarked);
+
+    try {
+      if (!placeUuid) {
+        alert("장소 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.");
+        return;
+      }
+
+      if (originalBookmarkState) {
+        // 북마크 해제
+        await removeBookmark(placeUuid, address);
+        alert("북마크가 해제되었습니다.");
+      } else {
+        // 북마크 추가
+        await addBookmark(placeUuid, address);
+        alert("북마크에 추가되었습니다.");
+      }
+    } catch (error) {
+      console.error("북마크 처리 실패:", error);
+
+      // 에러 발생 시 원래 상태로 되돌리기
+      setIsBookmarked(originalBookmarkState);
+      alert("북마크 처리 중 오류가 발생했습니다.");
+    }
+  };
+
+  const onSubmitReview = async () => {
+    if (!canSubmit || !address) return;
+
+    try {
+      // 1. 먼저 장소가 DB에 있는지 확인하고 없으면 생성
+      let placeId: string;
+
+      // 장소 검색 (이름으로)
+      const { data: existingPlace } = await supabase
+        .from("places")
+        .select("id")
+        .eq("name", displayName)
+        .single();
+
+      if (existingPlace) {
+        placeId = existingPlace.id;
+      } else {
+        // 장소가 없으면 생성
+        const { data: newPlace, error: placeError } = await supabase
+          .from("places")
+          .insert({
+            name: displayName,
+            address_text: "Unknown Address", // 실제로는 Google Places API에서 가져와야 함
+            latitude: 37.5665, // 기본값
+            longitude: 126.978, // 기본값
+          })
+          .select("id")
+          .single();
+
+        if (placeError) throw placeError;
+        placeId = newPlace.id;
+      }
+
+      // 2. 리뷰 생성 (이미지 포함)
+      const review = await submitReview({
+        placeId,
+        walletAddress: address,
+        rating: myRating,
+        body: reviewText,
+        photos: reviewFiles, // File 배열 전달
+      });
+
+      console.log("✅ Review submitted:", review.id);
+
+      // 3. 포인트 지급 (리뷰 작성 보상)
+      try {
+        if (address) {
+          let totalPoints = 10; // 기본 리뷰 작성 포인트
+          let reason = "리뷰 작성";
+
+          // 사진이 첨부된 경우 추가 포인트
+          if (reviewFiles.length > 0) {
+            totalPoints += 5;
+            reason = "리뷰 작성 (사진 포함)";
+          }
+
+          await addPointsToUser(address, totalPoints, reason, review.id);
+          console.log(`🎉 ${totalPoints}포인트 지급 완료!`);
+        }
+      } catch (pointError) {
+        console.error("포인트 지급 실패:", pointError);
+        // 포인트 지급 실패해도 리뷰 작성은 성공으로 처리
+      }
+
+      // 4. 새 리뷰를 상태에 바로 추가 (새로고침 없이)
+      const newReview: ReviewData = {
+        id: review.id,
+        place_id: review.place_id,
+        author_wallet: review.author_wallet,
+        rating: review.rating,
+        body: review.body,
+        created_at: review.created_at,
+        like_count: 0, // 새 리뷰는 좋아요 0개
+        photos:
+          review.photos?.map((photo: any) => ({
+            id: photo.id,
+            url: photo.url,
+            exif_latitude: photo.exif_latitude,
+            exif_longitude: photo.exif_longitude,
+          })) || [], // 업로드된 이미지들
+      };
+
+      // 새 리뷰를 맨 앞에 추가
+      setReviews((prev) => [newReview, ...prev]);
+
+      // 4. 초기화 및 닫기
+      setIsReviewOpen(false);
+      setReviewText("");
+      setReviewImages([]);
+      setReviewFiles([]);
+      if (textAreaRef.current) {
+        textAreaRef.current.style.height = "56px";
+      }
+      setMyRating(0);
+    } catch (error) {
+      console.error("❌ Review submission failed:", error);
+      alert("리뷰 제출에 실패했습니다: " + error);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const el = e.target;
+    setReviewText(el.value);
+
+    if (!textAreaRef.current) return;
+    const ta = textAreaRef.current;
+
+    // 현재 보이는 높이보다 내용이 커질 때만 확대 (초기 한 글자 입력 시 '점프' 방지)
+    if (el.scrollHeight > ta.clientHeight) {
+      ta.style.height = "auto";
+      ta.style.height = `${el.scrollHeight}px`;
+    }
+    // 내용이 줄어들어도 높이는 유지 (원하면 줄어들도록 변경 가능)
+  };
+
+  const handleBack = () => {
+    navigate(-1);
+  };
+
+  // 거리 포맷팅 함수 (StoreCard.tsx에서 가져옴)
+  function formatDistance(m?: number | null) {
+    if (m == null || m == undefined) return "";
+    if (m >= 1000) return `${(m / 1000).toFixed(1)}km`;
+    return `${Math.round(m)}m`;
+  }
 
   return (
     <div className="min-h-screen bg-white">
-      {/* 공통 헤더 */}
       <Header
         leftElement={
           <button
-            onClick={() => navigate(-1)}
-            className="p-2 h-15 bg-white"
-            aria-label="Back"
+            onClick={handleBack}
+            className="bg-white/60 flex items-center"
           >
-            <img
-              src="/icons/chevron-left.svg"
-              className="w-8 h-8 text-gray-950"
-            />
+            <img src="/icons/chevron-left.svg" className="w-8 h-8" alt="뒤로" />
           </button>
         }
         rightElement={
-          <button className="p-2 h-15 bg-white" aria-label="Menu">
-            <img
-              src="/icons/dots-vertical.svg"
-              className="w-8 h-8 text-gray-950"
-            />
-          </button>
+          <ConnectWalletButton onOpenUserMenu={() => setIsUserMenuOpen(true)} />
         }
         centerElement={
-          <div className="text-gray-600 text-rating-count">FavorEat</div>
+          <div className="flex items-center gap-0.5 text-redorange-500 text-rating-count">
+            <img src="/icons/logo.svg" alt="FavorEat" className="w-6 h-6" />
+            FavorEat
+          </div>
         }
       />
 
@@ -176,13 +674,22 @@ const StoreDetailScreen: React.FC = () => {
             {displayName}
           </div>
           <div className="flex flex-none shrink-0">
-            <button className="p-3.5 bg-gray-100 rounded-[16px]">
+            <button
+              onClick={handleShare}
+              className="p-3.5 bg-gray-100 hover:bg-gray-200 rounded-[16px] transition-colors"
+              title="공유하기"
+            >
               <img src="/icons/share-07.svg" className="w-5 h-5" />
             </button>
             <button
               type="button"
-              className="p-3.5 bg-gray-100 rounded-[16px]"
-              onClick={() => setIsBookmarked((v) => !v)}
+              className={`p-3.5 rounded-[16px] transition-colors ${
+                isBookmarked
+                  ? "bg-redorange-100 hover:bg-redorange-200"
+                  : "bg-gray-100 hover:bg-gray-200"
+              }`}
+              onClick={handleBookmarkToggle}
+              title={isBookmarked ? "북마크 해제" : "북마크 추가"}
             >
               <img
                 src={
@@ -209,7 +716,7 @@ const StoreDetailScreen: React.FC = () => {
           <div className="text-location-content text-gray-600">
             At my location{" "}
             <span className="text-location-content text-redorange-500">
-              909m
+              {formatDistance(distance) || "909m"}
             </span>
           </div>
         </div>
@@ -222,7 +729,7 @@ const StoreDetailScreen: React.FC = () => {
             className="text-review-title text-gray-700 ml-4"
             onClick={openComposer}
           >
-            리뷰 남기기
+            Write a review
           </button>
           <div className="flex">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -246,7 +753,7 @@ const StoreDetailScreen: React.FC = () => {
               aria-expanded={isReviewOpen}
               aria-controls="review-composer"
             >
-              Write a review
+              Close a review
             </button>
             <Rating
               value={myRating}
@@ -328,88 +835,288 @@ const StoreDetailScreen: React.FC = () => {
 
       <div className="h-2 bg-gray-200"></div>
 
-      {/* 리뷰 리스트 (샘플) */}
-      {false ? ( // 리뷰 데이터가 있을 때 true로 변경 또는 조건 연결
+      {/* 리뷰 리스트 */}
+      {isLoadingReviews ? (
+        <div className="flex flex-col justify-center items-center pt-[18px] text-center bg-gray-200 text-gray-600 h-32">
+          <p className="text-location-content">리뷰를 불러오는 중...</p>
+        </div>
+      ) : reviews.length > 0 ? (
         <div className="divide-y">
-          <div className="px-5 py-5">
-            <div
-              ref={menuWrapRef}
-              className="flex items-center justify-between mb-4 relative"
-            >
-              <div className="flex items-center gap-1">
-                <div className="w-6 h-6 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
-                  T
+          {reviews.map((review) => (
+            <div key={review.id} className="px-5 py-5">
+              <div className="flex items-center justify-between mb-4 relative">
+                <div className="flex items-center gap-1">
+                  <div className="w-6 h-6 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
+                    {review.author_wallet.slice(2, 4).toUpperCase()}
+                  </div>
+                  <div
+                    className={`text-review-title ${
+                      review.author_wallet.toLowerCase() ===
+                      address?.toLowerCase()
+                        ? "text-blue-700"
+                        : "text-gray-700"
+                    }`}
+                  >
+                    {review.author_wallet.slice(0, 6)}...
+                    {review.author_wallet.slice(-4)}
+                  </div>
                 </div>
-                <div className="text-review-title text-blue-700">TomatoCat</div>
+                {/* 본인 리뷰일 때만 메뉴 버튼 표시 */}
+                {review.author_wallet.toLowerCase() ===
+                  address?.toLowerCase() && (
+                  <button
+                    type="button"
+                    className="w-6 h-6 flex items-center justify-center text-2xl leading-none"
+                    onClick={() => {
+                      setOpenMenuId(
+                        openMenuId === review.id ? null : review.id
+                      );
+                    }}
+                  >
+                    ⋮
+                  </button>
+                )}
+                {openMenuId === review.id && (
+                  <div
+                    ref={menuWrapRef}
+                    className="absolute right-0 top-8 rounded-[20px] overflow-hidden border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.15)] bg-white"
+                  >
+                    <div
+                      className="flex w-full px-4 py-2.5 justify-center items-center gap-1 border-b border-gray-300 bg-gray-100 cursor-pointer"
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        setReviewToDelete(review.id);
+                        setShowDeleteModal(true);
+                      }}
+                    >
+                      <span className="text-action-content">Delete</span>
+                      <img src="/icons/trash.svg" className="w-4 h-4" />
+                    </div>
+                    <button
+                      type="button"
+                      className="flex w-full px-4 py-2.5 justify-center items-center gap-1 bg-gray-100"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log("Share 버튼 클릭됨!");
+                        setOpenMenuId(null);
+
+                        try {
+                          // Farcaster 환경 확인
+                          console.log("현재 환경:", window.location.href);
+                          console.log("SDK 상태 확인:", sdk);
+                          console.log(
+                            "composeCast 함수 존재:",
+                            typeof sdk.actions.composeCast
+                          );
+
+                          // Farcaster 환경이 아닌 경우 처리
+                          if (!sdk.actions.composeCast) {
+                            alert(
+                              "Farcaster 환경에서만 Cast 기능을 사용할 수 있습니다."
+                            );
+                            return;
+                          }
+
+                          // Google Maps 링크 생성 (google_place_id 사용)
+                          // placeUuid를 사용하여 places 테이블에서 google_place_id 조회
+                          let googlePlaceId = null;
+                          if (placeUuid) {
+                            try {
+                              const { data: placeData } = await supabase
+                                .from("places")
+                                .select("google_place_id")
+                                .eq("id", placeUuid)
+                                .single();
+                              googlePlaceId = placeData?.google_place_id;
+                            } catch (error) {
+                              console.error(
+                                "google_place_id 조회 실패:",
+                                error
+                              );
+                            }
+                          }
+
+                          const googleMapsUrl = googlePlaceId
+                            ? `https://www.google.com/maps/place/?q=place_id:${googlePlaceId}`
+                            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayName)}`;
+
+                          const result = await sdk.actions.composeCast({
+                            text: `🍽️ ${displayName}에서 맛있는 식사를 했어요! #FavorEat\n`,
+                            embeds: [googleMapsUrl],
+                          });
+
+                          if (result?.cast) {
+                            console.log(
+                              "Cast posted successfully:",
+                              result.cast.hash
+                            );
+                            alert("Cast가 성공적으로 작성되었습니다!");
+                          } else {
+                            console.log("Cast가 취소되었거나 실패했습니다.");
+                            alert("Cast 작성이 취소되었습니다.");
+                          }
+                        } catch (error) {
+                          console.error("Cast 작성 실패:", error);
+                          console.error("에러 상세:", error);
+                          alert(
+                            `Cast 작성에 실패했습니다: ${error instanceof Error ? error.message : String(error)}`
+                          );
+                        }
+                      }}
+                    >
+                      <span className="text-action-content">Share</span>
+                      <img src="/icons/share-06.svg" className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
-              <button
-                type="button"
-                className="w-6 h-6 flex items-center justify-center text-2xl leading-none"
-                onClick={() => setIsMenuOpen((v) => !v)}
-              >
-                ⋮
-              </button>
-              <ActionMenu
-                open={isMenuOpen}
-                onDelete={() => {
-                  setIsMenuOpen(false);
-                  setShowConfirm(true);
-                }}
-                onShare={() => {
-                  setIsMenuOpen(false); /* 공유 로직 */
-                }}
-              />
 
-              <ConfirmModal
-                open={showConfirm}
-                variant="confirm"
-                message="Are you sure you want to delete the review?"
-                cancelText="No, I won't."
-                confirmText="Yes, delete it."
-                onClose={() => setShowConfirm(false)}
-                onCancel={() => setShowConfirm(false)}
-                onConfirm={() => {
-                  setShowConfirm(false);
-                  // 실제 삭제 로직…
-                  setShowDone(true);
-                }}
-              />
-              <ConfirmModal
-                open={showDone}
-                variant="success"
-                message="The review has been successfully deleted!"
-                okText="okay"
-                onClose={() => setShowDone(false)}
-                onConfirm={() => setShowDone(false)}
-              />
-            </div>
-
-            <div className="text-orange-500 mb-2">★ ★ ★ ☆ ☆</div>
-
-            <div className="grid grid-cols-2 gap-3 mb-2">
-              <img src={img1} className="w-full h-32 object-cover rounded-xl" />
-              <img src={img2} className="w-full h-32 object-cover rounded-xl" />
-            </div>
-
-            <p className="text-review-content text-gray-800 mb-2">
-              너무너무 좋아요! 너무너무 좋아요! 너무너무 좋아요! 너무너무
-              좋아요!
-            </p>
-
-            <div className="text-xs text-gray-400">1h</div>
-          </div>
-
-          <div className="px-4 py-4 space-y-2">
-            <div className="flex items-center gap-1 mb-4">
-              <div className="w-6 h-6 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
-                U
+              {/* 별점 표시 */}
+              <div className="text-orange-500 mb-2">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <span key={i}>
+                    {i < Math.floor(review.rating) ? "★" : "☆"}
+                  </span>
+                ))}
               </div>
-              <div className="text-review-title text-gray-700">user</div>
+
+              {/* 리뷰 이미지들 */}
+              {review.photos.length > 0 && (
+                <div
+                  className={`grid gap-3 mb-2 ${review.photos.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
+                >
+                  {review.photos.map((photo, index) => {
+                    console.log(`리뷰 이미지 URL [${index}]:`, photo);
+                    // photo가 객체인 경우 url 속성 사용, 문자열인 경우 그대로 사용
+                    const imageUrl =
+                      typeof photo === "string" ? photo : photo.url;
+                    console.log(`실제 사용할 이미지 URL [${index}]:`, imageUrl);
+                    return (
+                      <img
+                        key={index}
+                        src={imageUrl}
+                        className="w-full h-32 object-cover rounded-xl"
+                        alt="Review photo"
+                        onError={(e) => {
+                          console.error(
+                            `이미지 로드 실패 [${index}]:`,
+                            imageUrl
+                          );
+                          console.error("이미지 로드 에러:", e);
+                          // 이미지 로드 실패 시 숨기기
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                        onLoad={() => {
+                          console.log(`이미지 로드 성공 [${index}]:`, imageUrl);
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 리뷰 텍스트 */}
+              {review.body && (
+                <>
+                  <p className="text-review-content text-gray-800 whitespace-normal break-words">
+                    {expandedReviews[review.id]
+                      ? review.body
+                      : review.body.length > 200
+                        ? review.body.slice(0, 200) + "..."
+                        : review.body}
+                  </p>
+                  {review.body.length > 200 && (
+                    <button
+                      type="button"
+                      className="text-xs text-gray-500"
+                      onClick={() => toggleExpand(review.id)}
+                    >
+                      {expandedReviews[review.id] ? "접기" : "더보기"}
+                    </button>
+                  )}
+                </>
+              )}
+
+              {/* 좋아요 수와 작성 시간 */}
+              <div className="flex items-center justify-between text-xs text-gray-400 mt-2">
+                <span>
+                  {(() => {
+                    const now = new Date();
+                    const reviewTime = new Date(review.created_at);
+                    const diffMs = now.getTime() - reviewTime.getTime();
+                    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+                    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    const diffMonths = Math.floor(diffDays / 30);
+                    const diffYears = Math.floor(diffDays / 365);
+
+                    if (diffYears >= 1) {
+                      return `${diffYears}y`;
+                    } else if (diffMonths >= 1) {
+                      return `${diffMonths}m`;
+                    } else if (diffDays >= 1) {
+                      return `${diffDays}d`;
+                    } else if (diffHours >= 1) {
+                      return `${diffHours}h`;
+                    } else {
+                      return `${diffMinutes}m`;
+                    }
+                  })()}
+                </span>
+
+                {/* 좋아요 버튼 - 다른 사용자의 리뷰에만 표시 */}
+                {review.author_wallet.toLowerCase() !==
+                  address?.toLowerCase() && (
+                  <button
+                    onClick={async () => {
+                      if (!address) {
+                        alert("지갑을 연결해주세요.");
+                        return;
+                      }
+
+                      try {
+                        console.log("좋아요 클릭:", review.id);
+
+                        const result = await addLikeToReview(
+                          review.id,
+                          address
+                        );
+
+                        if (result.success) {
+                          // UI에서 즉시 좋아요 수 업데이트
+                          setReviews((prev) =>
+                            prev.map((r) =>
+                              r.id === review.id
+                                ? { ...r, like_count: result.newLikeCount }
+                                : r
+                            )
+                          );
+                          console.log(
+                            `✅ 좋아요 추가 완료! 새로운 좋아요 수: ${result.newLikeCount}`
+                          );
+                        }
+                      } catch (error) {
+                        console.error("좋아요 실패:", error);
+                        if (
+                          error instanceof Error &&
+                          error.message.includes("이미 좋아요를 누른")
+                        ) {
+                          alert("이미 좋아요를 누른 리뷰입니다.");
+                        } else {
+                          alert("좋아요 처리 중 오류가 발생했습니다.");
+                        }
+                      }
+                    }}
+                    className="flex items-center gap-1 text-gray-500 hover:text-red-500 transition-colors"
+                  >
+                    <span className="text-sm">❤️</span>
+                    <span className="text-xs">{review.like_count}</span>
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="text-orange-500 mb-2">★ ★ ★ ★ ☆</div>
-            <p className="text-gray-700">너무너무 좋아요!</p>
-            <div className="text-xs text-gray-400">1h</div>
-          </div>
+          ))}
         </div>
       ) : (
         <div className="flex flex-col justify-start pt-[18px] text-center bg-gray-200 text-gray-600 h-screen">
@@ -420,6 +1127,66 @@ const StoreDetailScreen: React.FC = () => {
           </p>
         </div>
       )}
+
+      {/* 삭제 확인 모달 */}
+      <ConfirmModal
+        open={showDeleteModal}
+        variant={deleteSuccess ? "success" : "confirm"}
+        message={
+          deleteSuccess
+            ? "The review has been successfully deleted!"
+            : "Are you sure you want to delete the review?"
+        }
+        okText="okay"
+        onClose={() => {
+          setShowDeleteModal(false);
+          setReviewToDelete(null);
+          setDeleteSuccess(false);
+        }}
+        onCancel={() => {
+          setShowDeleteModal(false);
+          setReviewToDelete(null);
+          setDeleteSuccess(false);
+        }}
+        onConfirm={async () => {
+          if (deleteSuccess) {
+            // 성공 상태에서 okay 클릭 시 모달 닫기
+            setShowDeleteModal(false);
+            setReviewToDelete(null);
+            setDeleteSuccess(false);
+            return;
+          }
+
+          if (!reviewToDelete || !address) {
+            setShowDeleteModal(false);
+            setReviewToDelete(null);
+            setDeleteSuccess(false);
+            return;
+          }
+
+          try {
+            await softDeleteReview(reviewToDelete, address);
+            console.log("리뷰 삭제 완료");
+
+            // UI에서 즉시 제거
+            setReviews((prev) => prev.filter((r) => r.id !== reviewToDelete));
+
+            // 성공 상태로 변경
+            setDeleteSuccess(true);
+          } catch (error) {
+            console.error("리뷰 삭제 실패:", error);
+            alert("리뷰 삭제에 실패했습니다.");
+            setShowDeleteModal(false);
+            setReviewToDelete(null);
+            setDeleteSuccess(false);
+          }
+        }}
+      />
+
+      <UserMenu
+        isOpen={isUserMenuOpen}
+        onClose={() => setIsUserMenuOpen(false)}
+      />
     </div>
   );
 };

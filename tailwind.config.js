@@ -29,6 +29,9 @@ export default {
           400: "var(--Redorange-400, #FF6A32)",
           500: "var(--Redorange-500, #FF4500)",
         },
+        teal: {
+          500: "var(--Teal-500, #14B8A6)",
+        },
       },
 
       // 3) 타이포 토큰 (폰트크기/라인하이트/자간/굵기 내장)
@@ -84,10 +87,19 @@ export default {
           { lineHeight: "24px", letterSpacing: "0.01em", fontWeight: "400" },
         ],
 
-        // (11번) 캡션
-        "caption2-400": [
-          "12px",
-          { lineHeight: "16px", letterSpacing: "0.02em", fontWeight: "400" },
+        "landing-content": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+        "landing-button": ["14px", { lineHeight: "20px", fontWeight: "500" }],
+        "landing-content-desc": [
+          "18px",
+          { lineHeight: "27px", fontWeight: "400" },
+        ],
+        "landing-footer-title": [
+          "20px",
+          { lineHeight: "30px", fontWeight: "700" },
+        ],
+        "landing-section-title": [
+          "28px",
+          { lineHeight: "42px", fontWeight: "700" },
         ],
 
         // placeholder
@@ -99,9 +111,18 @@ export default {
           "18px",
           { lineHeight: "26px", letterSpacing: "0.01em", fontWeight: "700" },
         ],
+        "location-content-400": [
+          "12px",
+          { lineHeight: "14px", fontWeight: "400" },
+        ],
         "confirm-content": [
           "16px",
           { lineHeight: "24px", letterSpacing: "0.01em", fontWeight: "400" },
+        ],
+
+        "mypage-content-600": [
+          "12px",
+          { lineHeight: "16px", fontWeight: "600" },
         ],
       },
     },
