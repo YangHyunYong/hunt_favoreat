@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { BottomSheet } from "react-spring-bottom-sheet";
 import "react-spring-bottom-sheet/dist/style.css";
 import { useNavigate } from "react-router-dom";
-import Header from "./components/Header";
-import ConnectWalletButton from "./components/ConnectWalletButton";
-import UserMenu from "./components/UserMenu";
+import Header from "../components/Header";
+import ConnectWalletButton from "../components/ConnectWalletButton";
+import UserMenu from "../components/UserMenu";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import {
@@ -12,7 +12,7 @@ import {
   removeBookmark,
   getMyBookmarks,
   ensurePlaceExists,
-} from "./supabaseClient";
+} from "../supabaseClient";
 
 // Google Places API placeId를 UUID로 변환하는 함수
 async function placeIdToUUID(placeId: string): Promise<string> {

@@ -1,11 +1,11 @@
 import { sdk } from "@farcaster/frame-sdk";
 import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
-import LandingPage from "./LandingPage";
-import MainScreen from "./MainScreen";
-import StoreDetailScreen from "./StoreDetailScreen";
-import StoreListScreen from "./StoreListScreen";
-import BookmarkScreen from "./BookmarkScreen";
+import LandingPage from "./pages/LandingPage";
+import MainPage from "./pages/MainPage";
+import StoreDetailPage from "./pages/StoreDetailPage";
+import StoreListPage from "./pages/StoreListPage";
+import BookmarkPage from "./pages/BookmarkPage";
 
 function App() {
   useEffect(() => {
@@ -14,11 +14,11 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/" element={<MainScreen />} />
+      <Route path="/" element={<MainPage />} />
       <Route path="/intro" element={<LandingPage />} />
-      <Route path="/stores" element={<StoreListScreen />} />
-      <Route path="/store/:id" element={<StoreDetailScreen />} />
-      <Route path="/bookmarks" element={<BookmarkScreen />} />
+      <Route path="/stores" element={<StoreListPage />} />
+      <Route path="/store/:id" element={<StoreDetailPage />} />
+      <Route path="/bookmarks" element={<BookmarkPage />} />
     </Routes>
   );
 }

@@ -6,10 +6,10 @@ import {
   getReviewsWithImages,
   getBookmarkPlacesWithReviews,
   supabase,
-} from "./supabaseClient";
-import Header from "./components/Header";
-import ConnectWalletButton from "./components/ConnectWalletButton";
-import UserMenu from "./components/UserMenu";
+} from "../supabaseClient";
+import Header from "../components/Header";
+import ConnectWalletButton from "../components/ConnectWalletButton";
+import UserMenu from "../components/UserMenu";
 
 interface BookmarkData {
   id: string;

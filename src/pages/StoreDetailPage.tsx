@@ -3,12 +3,12 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import { sdk } from "@farcaster/frame-sdk";
-import Header from "./components/Header";
-import Rating from "./components/Rating";
-import ConfirmModal from "./components/ConfirmModal";
-import { useFavoreatApi } from "./hooks/useFavoreatApi";
-import ConnectWalletButton from "./components/ConnectWalletButton";
-import UserMenu from "./components/UserMenu";
+import Header from "../components/Header";
+import Rating from "../components/Rating";
+import ConfirmModal from "../components/ConfirmModal";
+import { useFavoreatApi } from "../hooks/useFavoreatApi";
+import ConnectWalletButton from "../components/ConnectWalletButton";
+import UserMenu from "../components/UserMenu";
 
 import {
   supabase,
@@ -20,7 +20,7 @@ import {
   ensurePlaceExists,
   addPointsToUser,
   addLikeToReview,
-} from "./supabaseClient";
+} from "../supabaseClient";
 
 interface PlaceDetailsResult {
   displayName: string;

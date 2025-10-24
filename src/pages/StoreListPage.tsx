@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Header from "./components/Header";
-import StoreCard from "./components/StoreCard";
+import Header from "../components/Header";
+import StoreCard from "../components/StoreCard";
 import { useNavigate, useLocation } from "react-router-dom";
-import { fetchPlaceDetails } from "./MainScreen";
-import ConnectWalletButton from "./components/ConnectWalletButton";
-import UserMenu from "./components/UserMenu";
+import { fetchPlaceDetails } from "./MainPage";
+import ConnectWalletButton from "../components/ConnectWalletButton";
+import UserMenu from "../components/UserMenu";
 
 // 이미지 캐시 시스템
 const imageCache = new Map<string, string[]>();
@@ -504,9 +504,7 @@ const StoreListScreen: React.FC = () => {
               {/* Map (비활성) -> 메인으로 이동 */}
               <button
                 data-active={viewMode === "map"}
-                onClick={() =>
-                  navigate("/app", { state: { cityName, townName } })
-                }
+                onClick={() => navigate("/", { state: { cityName, townName } })}
                 className="
                   flex justify-center items-center w-10 h-10
                   p-2 rounded-[16px] data-[active=true]:shadow-[0_0_4px_0_rgba(0,0,0,0.24)]
