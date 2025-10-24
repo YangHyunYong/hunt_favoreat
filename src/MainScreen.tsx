@@ -388,6 +388,54 @@ const MainScreen: React.FC = () => {
   // UserMenu 상태
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
+  // 현재 위치 상태
+  const [currentLocation, setCurrentLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+
+  // 현재 위치 가져오기
+  const getCurrentLocation = (): Promise<{ lat: number; lng: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported"));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.warn("위치 정보를 가져올 수 없습니다:", error);
+          // 기본값: 서울시청
+          resolve({ lat: 37.5665, lng: 126.978 });
+        }
+      );
+    });
+  };
+
+  // 현재 위치 가져오기
+  useEffect(() => {
+    const fetchCurrentLocation = async () => {
+      try {
+        const location = await getCurrentLocation();
+        setCurrentLocation(location);
+        console.log("현재 위치 가져오기 성공:", location);
+      } catch (error) {
+        console.error("위치 정보 가져오기 실패:", error);
+        // 기본값으로 서울시청 설정
+        setCurrentLocation({ lat: 37.5665, lng: 126.978 });
+        console.log("기본 위치 설정: 서울시청");
+      }
+    };
+
+    fetchCurrentLocation();
+  }, []);
+
   // 시트 높이 관찰(자동 라우팅만 유지)
   useEffect(() => {
     if (!sheetHostRef.current) return;
@@ -811,7 +859,14 @@ const MainScreen: React.FC = () => {
                   data-active={viewMode === "grid"}
                   onClick={() =>
                     navigate("/stores", {
-                      state: { cityName, townName },
+                      state: {
+                        cityName,
+                        townName,
+                        userLocation: currentLocation || {
+                          lat: 37.5665,
+                          lng: 126.978,
+                        },
+                      },
                     })
                   }
                   className="

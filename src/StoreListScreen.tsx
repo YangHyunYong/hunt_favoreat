@@ -3,6 +3,8 @@ import Header from "./components/Header";
 import StoreCard from "./components/StoreCard";
 import { useNavigate, useLocation } from "react-router-dom";
 import { fetchPlaceDetails } from "./MainScreen";
+import ConnectWalletButton from "./components/ConnectWalletButton";
+import UserMenu from "./components/UserMenu";
 
 // 이미지 캐시 시스템
 const imageCache = new Map<string, string[]>();
@@ -136,6 +138,31 @@ const StoreListScreen: React.FC = () => {
   type Item = React.ComponentProps<typeof StoreCard>;
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // 현재 위치 가져오기 (fallback)
+  const getCurrentLocation = (): Promise<{ lat: number; lng: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported"));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.warn("위치 정보를 가져올 수 없습니다:", error);
+          // 기본값: 서울시청
+          resolve({ lat: 37.5665, lng: 126.978 });
+        }
+      );
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -144,8 +171,22 @@ const StoreListScreen: React.FC = () => {
       try {
         await loadGoogleMaps();
 
-        // MainScreen에서 전달받은 위치 정보 사용
-        const userLoc = userLocation || { lat: 37.5665, lng: 126.978 };
+        // MainScreen에서 전달받은 위치 정보 사용, 없으면 현재 위치 가져오기
+        let userLoc = userLocation;
+
+        if (!userLoc) {
+          try {
+            userLoc = await getCurrentLocation();
+            console.log(
+              "StoreListScreen에서 현재 위치 가져오기 성공:",
+              userLoc
+            );
+          } catch (error) {
+            console.error("위치 정보 가져오기 실패:", error);
+            userLoc = { lat: 37.5665, lng: 126.978 };
+            console.log("기본 위치 설정: 서울시청");
+          }
+        }
 
         // PlacesService 생성 (DOM 엘리먼트 없이도 동작)
         const service = new google.maps.places.PlacesService(
@@ -423,9 +464,7 @@ const StoreListScreen: React.FC = () => {
       <Header
         leftElement={<div></div>}
         rightElement={
-          <button className="p-2 h-15 bg-white rounded-[16px]">
-            <img src="/icons/dots-vertical.svg" className="w-8 h-8" />
-          </button>
+          <ConnectWalletButton onOpenUserMenu={() => setIsUserMenuOpen(true)} />
         }
         centerElement={
           <div className="flex items-center gap-0.5 text-redorange-500 text-rating-count">
@@ -530,6 +569,10 @@ const StoreListScreen: React.FC = () => {
           </div>
         )}
       </div>
+      <UserMenu
+        isOpen={isUserMenuOpen}
+        onClose={() => setIsUserMenuOpen(false)}
+      />
     </div>
   );
 };
