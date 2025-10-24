@@ -87,7 +87,7 @@ function toSlug(name: string) {
     .replace(/^-+|-+$/g, ""); // 앞뒤 하이픈 제거
 }
 
-// Fetch Google Place details by placeId and return typed data (sheet 용 최소 필드만 반환).
+// Fetch Google Place details by placeId and return typed data (기존 Places API 사용).
 export async function fetchPlaceDetails(
   placeId: string
 ): Promise<PlaceDetailsResult> {
@@ -95,33 +95,47 @@ export async function fetchPlaceDetails(
     throw new Error("Google Maps JS SDK is not loaded yet.");
   }
 
-  const { Place } = (await google.maps.importLibrary("places")) as any;
+  // 기존 Places API 사용 (비용 절약)
+  const service = new google.maps.places.PlacesService(
+    document.createElement("div")
+  );
 
-  const place = new Place({ id: placeId });
-  await place.fetchFields({
-    fields: [
-      "displayName",
-      "photos",
-      "rating",
-      "userRatingCount",
-      "location",
-      "formattedAddress",
-    ],
+  return new Promise((resolve, reject) => {
+    service.getDetails(
+      {
+        placeId: placeId,
+        fields: [
+          "name",
+          "photos",
+          "rating",
+          "user_ratings_total",
+          "geometry",
+          "formatted_address",
+        ],
+      },
+      (place, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+          const photos: string[] =
+            place.photos?.map((photo: any) =>
+              photo.getUrl({ maxHeight: 400 })
+            ) || [];
+
+          resolve({
+            displayName: place.name || "",
+            photos,
+            rating: place.rating || undefined,
+            userRatingCount: place.user_ratings_total || undefined,
+            placeId: placeId,
+            address: place.formatted_address || undefined,
+            latitude: place.geometry?.location?.lat() || undefined,
+            longitude: place.geometry?.location?.lng() || undefined,
+          });
+        } else {
+          reject(new Error(`Places API error: ${status}`));
+        }
+      }
+    );
   });
-
-  const photos: string[] =
-    place.photos?.map((photo: any) => photo.getURI({ maxHeight: 400 })) || [];
-
-  return {
-    displayName: place.displayName || "",
-    photos,
-    rating: place.rating || undefined,
-    userRatingCount: place.userRatingCount || undefined,
-    placeId: placeId,
-    address: place.formattedAddress || undefined,
-    latitude: place.location?.lat() || undefined,
-    longitude: place.location?.lng() || undefined,
-  };
 }
 
 function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
@@ -165,8 +179,8 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
 
         const script = document.createElement("script");
         const apiKey = import.meta.env.VITE_GOOGLE_MAP_API_KEY;
-        // ✅ places 추가 (검색/자동완성/Place Details 위해 필수)
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=marker,places&language=en&region=US`;
+        // ✅ 기존 places 라이브러리 사용 (비용 절약)
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=en&region=US`;
         script.async = true;
         script.onerror = () => {
           console.error("Google Maps 스크립트 로드 실패");
@@ -224,37 +238,32 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
           }
         }
 
-        console.log("Google Maps 라이브러리 import 시작");
-        const { Map } = (await google.maps.importLibrary("maps")) as any;
-        const { AdvancedMarkerElement, PinElement } =
-          (await google.maps.importLibrary("marker")) as any;
-        console.log("Google Maps 라이브러리 import 완료");
+        console.log("Google Maps 라이브러리 로드 완료");
 
-        // mapId는 API KEY 그대로 사용 (요청사항 유지)
-        const gMap = new Map(mapDivRef.current as HTMLElement, {
+        // 기존 Google Maps API 사용 (비용 절약)
+        const gMap = new google.maps.Map(mapDivRef.current as HTMLElement, {
           center: position,
           zoom: 18,
-          mapId: import.meta.env.VITE_GOOGLE_MAP_API_KEY,
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
-          cameraControl: false,
           gestureHandling: "greedy",
         });
         gMapRef.current = gMap;
 
-        const pin = new PinElement({
-          background: "#F97316",
-          borderColor: "#FFFFFF",
-          glyphColor: "#FFFFFF",
-        });
-
-        // 최초 1회 현재 위치에 마커 생성
-        markerRef.current = new AdvancedMarkerElement({
+        // 기존 마커 사용 (비용 절약)
+        markerRef.current = new google.maps.Marker({
           map: gMap,
           position,
           title: "현재 위치",
-          content: pin.element,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: "#F97316",
+            fillOpacity: 1,
+            strokeColor: "#FFFFFF",
+            strokeWeight: 2,
+          },
         });
 
         // 지도 클릭: 마커만 이동(지도 중심은 그대로 유지), 상세 조회 + 이미지 프리로드 후 부모 콜백
@@ -275,7 +284,7 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
             if (reqId !== latestReqId.current) return;
 
             // 마커 위치 이동 (지도 중심은 유지)
-            markerRef.current?.setPosition?.(e.latLng);
+            markerRef.current?.setPosition(e.latLng);
 
             // 부모로 전달 (이미지 캐시에 올라간 상태)
             onPlaceSelectedRef.current?.(details);
@@ -291,65 +300,77 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
           if (!placeId) return;
 
           try {
-            const { Place } = (await google.maps.importLibrary(
-              "places"
-            )) as any;
-            const p = new Place({ id: placeId });
-            await p.fetchFields({
-              fields: [
-                "location",
-                "photos",
-                "displayName",
-                "rating",
-                "userRatingCount",
-              ],
-            });
+            // 기존 Places API 사용 (비용 절약)
+            const service = new google.maps.places.PlacesService(
+              document.createElement("div")
+            );
 
-            const loc = p.location;
-            if (loc) {
-              const latLng = { lat: loc.lat(), lng: loc.lng() };
+            service.getDetails(
+              {
+                placeId: placeId,
+                fields: [
+                  "name",
+                  "photos",
+                  "rating",
+                  "user_ratings_total",
+                  "geometry",
+                ],
+              },
+              (place, status) => {
+                if (
+                  status === google.maps.places.PlacesServiceStatus.OK &&
+                  place
+                ) {
+                  const loc = place.geometry?.location;
+                  if (loc) {
+                    const latLng = { lat: loc.lat(), lng: loc.lng() };
 
-              // ✅ 지도/핀 이동 (기존 코드 유지)
-              gMapRef.current?.panTo?.(latLng);
-              gMapRef.current?.setZoom?.(18);
-              markerRef.current?.setPosition?.(latLng);
+                    // ✅ 지도/핀 이동 (기존 코드 유지)
+                    gMapRef.current?.panTo(latLng);
+                    gMapRef.current?.setZoom(18);
+                    markerRef.current?.setPosition(latLng);
 
-              // ✅ 역지오코딩으로 City/Town 갱신 추가
-              const geocoder = new google.maps.Geocoder();
-              geocoder.geocode(
-                { location: latLng },
-                (results: any, status: any) => {
-                  if (status === "OK" && results?.[0]) {
-                    const comps = results[0].address_components;
-                    let city = "",
-                      town = "";
-                    comps.forEach((c: any) => {
-                      if (c.types.includes("country")) {
-                        city = c.long_name;
+                    // ✅ 역지오코딩으로 City/Town 갱신 추가
+                    const geocoder = new google.maps.Geocoder();
+                    geocoder.geocode(
+                      { location: latLng },
+                      (results: any, status: any) => {
+                        if (status === "OK" && results?.[0]) {
+                          const comps = results[0].address_components;
+                          let city = "",
+                            town = "";
+                          comps.forEach((c: any) => {
+                            if (c.types.includes("country")) {
+                              city = c.long_name;
+                            }
+                            if (
+                              c.types.includes("locality") ||
+                              c.types.includes("sublocality")
+                            ) {
+                              town = c.long_name;
+                            }
+                          });
+                          onLocationResolvedRef.current(city, town); // ← 좌측 라벨 갱신
+                        }
                       }
-                      if (
-                        c.types.includes("locality") ||
-                        c.types.includes("sublocality")
-                      ) {
-                        town = c.long_name;
-                      }
-                    });
-                    onLocationResolvedRef.current(city, town); // ← 좌측 라벨 갱신
+                    );
                   }
+
+                  const photoURLs: string[] =
+                    place.photos?.map((ph: any) =>
+                      ph.getUrl({ maxHeight: 400 })
+                    ) || [];
+                  if (photoURLs.length) preloadImages(photoURLs);
+
+                  onPlaceSelectedRef.current?.({
+                    displayName: place.name ?? "",
+                    photos: photoURLs,
+                    rating: place.rating ?? undefined,
+                    userRatingCount: place.user_ratings_total ?? undefined,
+                  });
                 }
-              );
-            }
-
-            const photoURLs: string[] =
-              p.photos?.map((ph: any) => ph.getURI({ maxHeight: 400 })) || [];
-            if (photoURLs.length) await preloadImages(photoURLs);
-
-            onPlaceSelectedRef.current?.({
-              displayName: p.displayName ?? "",
-              photos: photoURLs,
-              rating: p.rating ?? undefined,
-              userRatingCount: p.userRatingCount ?? undefined,
-            });
+              }
+            );
           } catch (e) {
             console.error(e);
           }
@@ -761,20 +782,23 @@ const MainScreen: React.FC = () => {
       }
       setLoadingPred(true);
       try {
-        await google.maps.importLibrary("places");
-        const svc = new (google.maps.places as any).AutocompleteService();
+        // 기존 Places API 사용 (비용 절약)
+        const svc = new google.maps.places.AutocompleteService();
         if (!sessionTokenRef.current) {
-          sessionTokenRef.current = new (
-            google.maps.places as any
-          ).AutocompleteSessionToken();
+          sessionTokenRef.current =
+            new google.maps.places.AutocompleteSessionToken();
         }
         svc.getPlacePredictions(
           {
             input: query,
             sessionToken: sessionTokenRef.current,
           },
-          (res: any[], status: string) => {
-            if (status === "OK" && Array.isArray(res)) setPredictions(res);
+          (
+            res: google.maps.places.AutocompletePrediction[] | null,
+            status: google.maps.places.PlacesServiceStatus
+          ) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && res)
+              setPredictions(res);
             else setPredictions([]);
             setLoadingPred(false);
           }
