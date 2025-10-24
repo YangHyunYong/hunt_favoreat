@@ -224,7 +224,7 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
         }
 
         // 기본 위치 (서울 시청)
-        let position = { lat: 37.5665, lng: 126.978 };
+        let position = { lat: 37.37, lng: 126.9562 };
 
         if ("geolocation" in navigator) {
           try {
@@ -487,7 +487,7 @@ const MainScreen: React.FC = () => {
         (error) => {
           console.warn("위치 정보를 가져올 수 없습니다:", error);
           // 기본값: 서울시청
-          resolve({ lat: 37.5665, lng: 126.978 });
+          resolve({ lat: 37.37, lng: 126.9562 });
         }
       );
     });
@@ -503,7 +503,7 @@ const MainScreen: React.FC = () => {
       } catch (error) {
         console.error("위치 정보 가져오기 실패:", error);
         // 기본값으로 서울시청 설정
-        setCurrentLocation({ lat: 37.5665, lng: 126.978 });
+        setCurrentLocation({ lat: 37.37, lng: 126.9562 });
         console.log("기본 위치 설정: 서울시청");
       }
     };
@@ -946,8 +946,8 @@ const MainScreen: React.FC = () => {
                         cityName,
                         townName,
                         userLocation: currentLocation || {
-                          lat: 37.5665,
-                          lng: 126.978,
+                          lat: 37.37,
+                          lng: 126.9562,
                         },
                       },
                     })

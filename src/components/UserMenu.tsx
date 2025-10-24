@@ -187,11 +187,11 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
 
           {/* 포인트 정보 */}
           <div className="flex flex-col items-center gap-0.5">
-            <p className="text-rating-count text-gray-500">FavorEat Point</p>
+            <p className="text-rating-count text-gray-500">yumyum point</p>
             <p className="text-place-title text-gray-900">
               {pointsLoading
                 ? "로딩 중..."
-                : `${userPoints.toLocaleString()} FavP`}
+                : `${userPoints.toLocaleString()} YuP`}
             </p>
           </div>
 
