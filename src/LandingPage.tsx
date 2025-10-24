@@ -1,74 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-// Figma 아이콘 상수들
-const imgImageWithFallback =
-  "https://www.figma.com/api/mcp/asset/db6ceb6a-0072-42ad-ad3c-30e33b1556b1";
-const imgImageWithFallback1 =
-  "https://www.figma.com/api/mcp/asset/13b931c5-c909-42f0-9433-4fea6bb97437";
-const imgImageWithFallback2 =
-  "https://www.figma.com/api/mcp/asset/34e7d2ad-2bb8-4412-b21d-c3d68dd24879";
-const imgIcon =
-  "https://www.figma.com/api/mcp/asset/97ebf536-35cd-447e-8c4d-2aaa3206732d";
-const imgIcon1 =
-  "https://www.figma.com/api/mcp/asset/8229c0bc-bcb0-4a33-ad36-2cf1ca449239";
-const imgIcon2 =
-  "https://www.figma.com/api/mcp/asset/3c662dda-db48-441b-8ea9-2e5106dd0a30";
-const imgIcon3 =
-  "https://www.figma.com/api/mcp/asset/bbbf23ca-7195-4a4f-ae5c-5695d2a0b28c";
-const imgIcon4 =
-  "https://www.figma.com/api/mcp/asset/ca2cbd16-fef2-427a-bcca-2bc0efc1834d";
-const imgIcon5 =
-  "https://www.figma.com/api/mcp/asset/196c3d5f-4454-4d10-b06f-92185ee3f341";
-const imgIcon6 =
-  "https://www.figma.com/api/mcp/asset/eb1ae80a-5c2a-42e8-a858-5baa20daf0e9";
-const imgIcon7 =
-  "https://www.figma.com/api/mcp/asset/a4a59a0a-3ba9-497f-be82-98ef849d21c3";
-const imgIcon8 =
-  "https://www.figma.com/api/mcp/asset/886a489c-a4d2-494c-8c3c-7b1590225344";
-const imgIcon9 =
-  "https://www.figma.com/api/mcp/asset/c743b45a-4230-4d29-b708-324e3c6dc5b4";
-const imgIcon10 =
-  "https://www.figma.com/api/mcp/asset/1f6004d3-bdae-427d-8e16-226dd2e6a835";
-const imgIcon11 =
-  "https://www.figma.com/api/mcp/asset/5eb974a0-a974-4aa3-a226-5abc601e4ddb";
-const imgIcon12 =
-  "https://www.figma.com/api/mcp/asset/240c1384-f35b-4161-ae43-874ae5ab45b5";
-const imgIcon13 =
-  "https://www.figma.com/api/mcp/asset/d54b8f2a-497b-4964-b157-e6efdf4bcf70";
-const imgIcon14 =
-  "https://www.figma.com/api/mcp/asset/94522a38-f75a-4cac-b0ab-91817f2f652e";
-const imgIcon15 =
-  "https://www.figma.com/api/mcp/asset/e7dd6911-8937-4117-b1da-7055e4f644bf";
-const imgIcon16 =
-  "https://www.figma.com/api/mcp/asset/a71d31b5-cd57-431d-95c0-82a93d9a922a";
-const imgIcon17 =
-  "https://www.figma.com/api/mcp/asset/1044e4bb-13e5-4793-9106-5dc165aa8fb3";
-const imgIcon18 =
-  "https://www.figma.com/api/mcp/asset/f0319bc4-22a7-4fd3-a063-43f00986aab1";
-const imgIcon19 =
-  "https://www.figma.com/api/mcp/asset/c99d5651-72fe-4936-8a47-1d8c26e7917b";
-const imgIcon20 =
-  "https://www.figma.com/api/mcp/asset/63655f0d-ba0e-4ad8-9e7b-247970f21307";
-const imgIcon21 =
-  "https://www.figma.com/api/mcp/asset/01305f5c-06c8-44dc-a344-75200c1808d0";
-const imgIcon22 =
-  "https://www.figma.com/api/mcp/asset/5dc800dc-b640-44b0-b381-64805aa8916c";
-const imgIcon23 =
-  "https://www.figma.com/api/mcp/asset/76a5bb11-501e-474a-ae56-20e1adab73f1";
-const imgIcon24 =
-  "https://www.figma.com/api/mcp/asset/f3cb0b01-2357-4f01-b303-e6189868ee69";
-const imgIcon25 =
-  "https://www.figma.com/api/mcp/asset/8244709f-669c-4432-81c6-7a0953967021";
-const imgIcon26 =
-  "https://www.figma.com/api/mcp/asset/57e3e4ba-8faf-46d1-a112-d51ffc56ab41";
-const imgIcon27 =
-  "https://www.figma.com/api/mcp/asset/ee07b22d-cd31-4544-a2c2-f0f5fec2c153";
-const imgIcon28 =
-  "https://www.figma.com/api/mcp/asset/6d2efc12-7f20-4fe4-98ab-5458a19d3a94";
-const imgIcon29 =
-  "https://www.figma.com/api/mcp/asset/c50d8579-5559-455a-9c39-8bf371207611";
-
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
 
@@ -148,11 +80,15 @@ const LandingPage: React.FC = () => {
                   className="bg-redorange-500 hover:bg-redorange-600 text-white px-4 py-2 rounded-[14px] text-sm font-medium transition-colors flex items-center gap-2"
                 >
                   Start Reviewing
-                  <img src={imgIcon28} alt="Arrow" className="w-4 h-4" />
+                  <img
+                    src={"/icons/arrow-narrow-right.svg"}
+                    alt="Arrow"
+                    className="w-4 h-4"
+                  />
                 </button>
                 <button className="bg-white border border-gray-200 text-gray-950 px-4 py-2 rounded-[14px] text-sm font-medium transition-colors flex items-center gap-2">
                   View on Farcaster
-                  <img src={imgIcon29} alt="Arrow" className="w-4 h-4" />
+                  <img src={"/icons/out.svg"} alt="Arrow" className="w-4 h-4" />
                 </button>
               </div>
 
@@ -220,7 +156,7 @@ const LandingPage: React.FC = () => {
             <div className="rounded-[16px] border border-[rgba(239,68,68,0.20)] bg-[rgba(239,68,68,0.05)] p-6 h-[206px]">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-[15.5px]">
                 <img
-                  src={imgIcon}
+                  src={"/icons/alert.svg"}
                   alt="Sponsored Content"
                   className="w-8 h-8"
                 />
@@ -228,7 +164,7 @@ const LandingPage: React.FC = () => {
               <h3 className="text-landing-content text-gray-950 mb-3">
                 Sponsored Content
               </h3>
-              <p className="text-gray-400 w-">
+              <p className="text-gray-400">
                 Web2 review platforms are flooded with paid and promotional
                 reviews, making it hard to trust ratings
               </p>
@@ -236,7 +172,11 @@ const LandingPage: React.FC = () => {
 
             <div className="rounded-[16px] border border-[rgba(239,68,68,0.20)] bg-[rgba(239,68,68,0.05)] p-6 h-[206px]">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-[15.5px]">
-                <img src={imgIcon} alt="No Recognition" className="w-8 h-8" />
+                <img
+                  src={"/icons/alert.svg"}
+                  alt="No Recognition"
+                  className="w-8 h-8"
+                />
               </div>
               <h3 className="text-landing-content text-gray-950 mb-3">
                 No Recognition
@@ -249,7 +189,11 @@ const LandingPage: React.FC = () => {
 
             <div className="rounded-[16px] border border-[rgba(239,68,68,0.20)] bg-[rgba(239,68,68,0.05)] p-6 h-[206px]">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center mb-[15.5px]">
-                <img src={imgIcon} alt="Fake Reviews" className="w-8 h-8" />
+                <img
+                  src={"/icons/alert.svg"}
+                  alt="Fake Reviews"
+                  className="w-8 h-8"
+                />
               </div>
               <h3 className="text-landing-content text-gray-950 mb-3">
                 Fake Reviews
@@ -277,7 +221,7 @@ const LandingPage: React.FC = () => {
             <div className="rounded-[16px] border border-[rgba(34,197,94,0.20)] bg-[rgba(34,197,94,0.05)] p-6">
               <div className="w-8 h-8 flex items-center justify-center mb-4">
                 <img
-                  src={imgIcon1}
+                  src={"/icons/verify.svg"}
                   alt="EXIF Verification"
                   className="w-8 h-8"
                 />
@@ -293,7 +237,11 @@ const LandingPage: React.FC = () => {
 
             <div className="rounded-[16px] border border-[rgba(34,197,94,0.20)] bg-[rgba(34,197,94,0.05)] p-6">
               <div className="w-8 h-8 flex items-center justify-center mb-4">
-                <img src={imgIcon2} alt="Point Rewards" className="w-8 h-8" />
+                <img
+                  src={"/icons/reward.svg"}
+                  alt="Point Rewards"
+                  className="w-8 h-8"
+                />
               </div>
               <h3 className="text-landing-content text-gray-950 mb-3">
                 Point Rewards
@@ -306,7 +254,11 @@ const LandingPage: React.FC = () => {
 
             <div className="rounded-[16px] border border-[rgba(34,197,94,0.20)] bg-[rgba(34,197,94,0.05)] p-6">
               <div className="w-8 h-8 flex items-center justify-center mb-4">
-                <img src={imgIcon3} alt="On-Chain Trust" className="w-8 h-8" />
+                <img
+                  src={"/icons/marker.svg"}
+                  alt="On-Chain Trust"
+                  className="w-8 h-8"
+                />
               </div>
               <h3 className="text-landing-content text-gray-950 mb-3">
                 On-Chain Trust
@@ -324,7 +276,7 @@ const LandingPage: React.FC = () => {
               <div className="text-center">
                 <div className="w-12 h-12 flex items-center justify-center mx-auto mb-3">
                   <img
-                    src={imgIcon4}
+                    src={"/icons/check.svg"}
                     alt="Photo Verification"
                     className="w-12 h-12"
                   />
@@ -339,7 +291,7 @@ const LandingPage: React.FC = () => {
               <div className="text-center">
                 <div className="w-12 h-12 flex items-center justify-center mx-auto mb-3">
                   <img
-                    src={imgIcon5}
+                    src={"/icons/check-blue.svg"}
                     alt="Base Network"
                     className="w-12 h-12"
                   />
@@ -354,7 +306,7 @@ const LandingPage: React.FC = () => {
               <div className="text-center">
                 <div className="w-12 h-12 flex items-center justify-center mx-auto mb-3">
                   <img
-                    src={imgIcon6}
+                    src={"/icons/check-green.svg"}
                     alt="Farcaster Frames"
                     className="w-12 h-12"
                   />
@@ -368,7 +320,11 @@ const LandingPage: React.FC = () => {
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 flex items-center justify-center mx-auto mb-3">
-                  <img src={imgIcon7} alt="Anti-Abuse" className="w-12 h-12" />
+                  <img
+                    src={"/icons/check-purple.svg"}
+                    alt="Anti-Abuse"
+                    className="w-12 h-12"
+                  />
                 </div>
                 <h4 className="text-landing-content text-gray-950 mb-2">
                   Anti-Abuse
@@ -402,7 +358,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white rounded-[16px] p-8 shadow-sm">
               <div className="w-12 h-12 bg-[rgba(255,69,0,0.10)] rounded-[16px] flex items-center justify-center mb-4">
                 <img
-                  src={imgIcon8}
+                  src={"/icons/camera.svg"}
                   alt="Location-Based Verification"
                   className="w-6 h-6"
                 />
@@ -419,7 +375,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white rounded-[16px] p-8 shadow-sm">
               <div className="w-12 h-12 bg-[rgba(59,130,246,0.10)] rounded-[16px] flex items-center justify-center mb-4">
                 <img
-                  src={imgIcon9}
+                  src={"icons/star-blue.svg"}
                   alt="Point Reward System"
                   className="w-6 h-6"
                 />
@@ -436,7 +392,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white rounded-[16px] p-8 shadow-sm">
               <div className="w-12 h-12 bg-[rgba(20,184,166,0.10)] rounded-[16px] flex items-center justify-center mb-4">
                 <img
-                  src={imgIcon10}
+                  src={"/icons/thunder.svg"}
                   alt="Farcaster Frame Integration"
                   className="w-6 h-6"
                 />
@@ -453,7 +409,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white rounded-[16px] p-8 shadow-sm">
               <div className="w-12 h-12 bg-[rgba(139,92,246,0.10)] rounded-[16px] flex items-center justify-center mb-4">
                 <img
-                  src={imgIcon11}
+                  src={"/icons/lock.svg"}
                   alt="Anti-Abuse Protection"
                   className="w-6 h-6"
                 />
@@ -470,7 +426,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white rounded-[16px] p-8 shadow-sm">
               <div className="w-12 h-12 bg-[rgba(34,197,94,0.10)] rounded-[16px] flex items-center justify-center mb-4">
                 <img
-                  src={imgIcon12}
+                  src={"/icons/marker.svg"}
                   alt="On-Chain Storage"
                   className="w-6 h-6"
                 />
@@ -487,7 +443,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white rounded-[16px] p-8 shadow-sm">
               <div className="w-12 h-12 bg-[rgba(239,68,68,0.10)] rounded-[16px] flex items-center justify-center mb-4">
                 <img
-                  src={imgIcon13}
+                  src={"/icons/community.svg"}
                   alt="Community Driven"
                   className="w-6 h-6"
                 />
@@ -513,7 +469,7 @@ const LandingPage: React.FC = () => {
               <img
                 src={"/icons/phone-front.png"}
                 alt="Trust Built Into Every Review"
-                className="absolute right-[90px] top-[-30px] w-[720px] h-[660px] object-cover rounded-[16px]"
+                className="absolute right-[160px] top-[10px] w-[300px] h-[500px] object-cover rounded-[16px]"
               />
             </div>
             <div className="space-y-6">
@@ -597,7 +553,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white border border-gray-200 rounded-[16px] p-6 text-center relative h-[318px]">
               <div className="w-16 h-16 bg-[rgba(255,69,0,0.10)] rounded-full flex items-center justify-center mx-auto mb-4 relative">
                 <img
-                  src={imgIcon14}
+                  src={"/icons/search.svg"}
                   alt="Search for a Place"
                   className="w-8 h-8"
                 />
@@ -617,7 +573,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white border border-gray-200 rounded-[16px] p-6 text-center relative h-[318px]">
               <div className="w-16 h-16 bg-[rgba(255,69,0,0.10)] rounded-full flex items-center justify-center mx-auto mb-4 relative">
                 <img
-                  src={imgIcon15}
+                  src={"/icons/note.svg"}
                   alt="Write Your Review"
                   className="w-8 h-8"
                 />
@@ -637,7 +593,7 @@ const LandingPage: React.FC = () => {
             <div className="bg-white border border-gray-200 rounded-[16px] p-6 text-center relative h-[318px]">
               <div className="w-16 h-16 bg-[rgba(255,69,0,0.10)] rounded-full flex items-center justify-center mx-auto mb-4 relative">
                 <img
-                  src={imgIcon16}
+                  src={"/icons/share.svg"}
                   alt="Share to Community"
                   className="w-8 h-8"
                 />
@@ -656,7 +612,11 @@ const LandingPage: React.FC = () => {
 
             <div className="bg-white border border-gray-200 rounded-[16px] p-6 text-center relative h-[318px]">
               <div className="w-16 h-16 bg-[rgba(255,69,0,0.10)] rounded-full flex items-center justify-center mx-auto mb-4 relative">
-                <img src={imgIcon17} alt="Earn Rewards" className="w-8 h-8" />
+                <img
+                  src={"/icons/gift.svg"}
+                  alt="Earn Rewards"
+                  className="w-8 h-8"
+                />
                 <div className="absolute bg-redorange-500 rounded-full w-8 h-8 flex items-center justify-center -top-2 -right-2">
                   <span className="text-white text-landing-content">4</span>
                 </div>
@@ -679,7 +639,11 @@ const LandingPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               <div className="text-center">
                 <div className="w-12 h-12 bg-[rgba(255,69,0,0.10)] rounded-[16px] flex items-center justify-center mx-auto mb-4">
-                  <span className="text-redorange-500">✓</span>
+                  <img
+                    src={"/icons/check-small-red.svg"}
+                    alt="Check"
+                    className="w-3 h-3"
+                  />
                 </div>
                 <h4 className="text-landing-content text-gray-950 mb-2">
                   Easier
@@ -690,7 +654,11 @@ const LandingPage: React.FC = () => {
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 bg-[rgba(59,130,246,0.10)] rounded-[16px] flex items-center justify-center mx-auto mb-4">
-                  <span className="text-blue-500">✓</span>
+                  <img
+                    src={"/icons/check-small-blue.svg"}
+                    alt="Check"
+                    className="w-3 h-3"
+                  />
                 </div>
                 <h4 className="text-landing-content text-gray-950 mb-2">
                   Safer
@@ -702,7 +670,11 @@ const LandingPage: React.FC = () => {
               </div>
               <div className="text-center">
                 <div className="w-12 h-12 bg-[rgba(20,184,166,0.10)] rounded-[16px] flex items-center justify-center mx-auto mb-4">
-                  <span className="text-teal-500">✓</span>
+                  <img
+                    src={"/icons/check-small-green.svg"}
+                    alt="Check"
+                    className="w-3 h-3"
+                  />
                 </div>
                 <h4 className="text-landing-content text-gray-950 mb-2">
                   Meaningful
@@ -873,7 +845,7 @@ const LandingPage: React.FC = () => {
                 />
               </div>
               <div className="w-10 h-10 bg-gray-100 rounded-[16px] flex items-center justify-center">
-                <img src={imgIcon25} alt="LinkedIn" className="w-5 h-5" />
+                <img src={"/icons/out.svg"} alt="out" className="w-5 h-5" />
               </div>
             </div>
           </div>
@@ -897,19 +869,7 @@ const LandingPage: React.FC = () => {
             </p>
             <div className="flex gap-6">
               <a
-                href="#"
-                className="text-landing-content text-gray-400 hover:text-gray-950 transition-colors"
-              >
-                Privacy Policy
-              </a>
-              <a
-                href="#"
-                className="text-landing-content text-gray-400 hover:text-gray-950 transition-colors"
-              >
-                Terms of Service
-              </a>
-              <a
-                href="#"
+                href="https://t.me/+0wdMgwmLhNUwZjM1"
                 className="text-landing-content text-gray-400 hover:text-gray-950 transition-colors"
               >
                 Contact
