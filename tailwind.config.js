@@ -88,6 +88,11 @@ export default {
         ],
 
         "landing-content": ["16px", { lineHeight: "24px", fontWeight: "400" }],
+        "landing-content-600": [
+          "16px",
+          { lineHeight: "24px", fontWeight: "600" },
+        ],
+
         "landing-button": ["14px", { lineHeight: "20px", fontWeight: "500" }],
         "landing-content-desc": [
           "18px",
@@ -100,6 +105,11 @@ export default {
         "landing-section-title": [
           "28px",
           { lineHeight: "42px", fontWeight: "700" },
+        ],
+
+        "landing-chart-title": [
+          "16px",
+          { lineHeight: "24px", fontWeight: "700" },
         ],
 
         // placeholder
