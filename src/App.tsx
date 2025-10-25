@@ -6,7 +6,6 @@ import MainPage from "./pages/MainPage";
 import StoreDetailPage from "./pages/StoreDetailPage";
 import StoreListPage from "./pages/StoreListPage";
 import BookmarkPage from "./pages/BookmarkPage";
-import TempPage from "./pages/TempPage";
 
 function App() {
   useEffect(() => {
@@ -15,12 +14,11 @@ function App() {
 
   return (
     <Routes>
-      <Route path="/temp" element={<MainPage />} />
+      <Route path="/" element={<MainPage />} />
       <Route path="/intro" element={<LandingPage />} />
       <Route path="/stores" element={<StoreListPage />} />
       <Route path="/store/:id" element={<StoreDetailPage />} />
       <Route path="/bookmarks" element={<BookmarkPage />} />
-      <Route path="/" element={<TempPage />} />
     </Routes>
   );
 }
