@@ -615,9 +615,9 @@ const BookmarkScreen: React.FC = () => {
                       <img
                         src="/icons/thumbs-up.svg"
                         alt="좋아요"
-                        className="w-4 h-4"
+                        className="w-5 h-5"
                       />
-                      <span className="text-xs">{review.like_count}</span>
+                      <span className="text-[15px]">{review.like_count}</span>
                     </div>
                   </div>
                 </div>

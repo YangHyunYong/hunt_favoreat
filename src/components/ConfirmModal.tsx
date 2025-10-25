@@ -46,7 +46,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
         </button>
 
         {/* Message */}
-        <div className="text-center text-gray-800 text-confirm-content px-4">
+        <div className="text-center text-gray-800 text-confirm-content px-4 whitespace-pre-line">
           {message}
         </div>
 

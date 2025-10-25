@@ -116,6 +116,10 @@ const StoreDetailScreen: React.FC = () => {
   // 리뷰 데이터 상태
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+
+  // 리뷰 작성 완료 모달 상태
+  const [showReviewCompleteModal, setShowReviewCompleteModal] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState("");
   const [currentPlaceId, setCurrentPlaceId] = useState<string | null>(null);
   const [expandedReviews, setExpandedReviews] = useState<
     Record<string, boolean>
@@ -144,7 +148,7 @@ const StoreDetailScreen: React.FC = () => {
       if (!place.placeId || placeUuid) return; // 이미 생성되었거나 placeId가 없으면 스킵
 
       try {
-        console.log("장소 UUID 초기화 시작:", place.placeId);
+        // 장소 UUID 초기화 시작
 
         // placeId가 UUID 형태인지 확인
         const isUUID =
@@ -154,7 +158,7 @@ const StoreDetailScreen: React.FC = () => {
 
         if (isUUID) {
           // UUID인 경우 places 테이블에서 해당 ID가 존재하는지 확인
-          console.log("UUID 형태의 placeId 확인:", place.placeId);
+          // UUID 형태의 placeId 확인
 
           const { data: existingPlace } = await supabase
             .from("places")
@@ -164,14 +168,11 @@ const StoreDetailScreen: React.FC = () => {
 
           if (existingPlace) {
             // places 테이블에 존재하는 UUID인 경우 그대로 사용
-            console.log("places 테이블에서 UUID 발견:", place.placeId);
+            // places 테이블에서 UUID 발견
             setPlaceUuid(place.placeId);
           } else {
             // places 테이블에 없는 UUID인 경우 google_place_id로 검색
-            console.log(
-              "places 테이블에 없는 UUID, google_place_id로 검색:",
-              place.placeId
-            );
+            // places 테이블에 없는 UUID, google_place_id로 검색
 
             const { data: placeByGoogleId } = await supabase
               .from("places")
@@ -614,6 +615,17 @@ const StoreDetailScreen: React.FC = () => {
         textAreaRef.current.style.height = "56px";
       }
       setMyRating(0);
+
+      // 5. 리뷰 작성 완료 모달 표시
+      // 이미지 포함 여부에 따라 다른 메시지 설정
+      if (reviewFiles.length > 0) {
+        setReviewMessage(
+          "You have earned 15 YuP\nthrough photo review creation."
+        );
+      } else {
+        setReviewMessage("You have earned 10 YuP\nthrough review creation.");
+      }
+      setShowReviewCompleteModal(true);
     } catch (error) {
       console.error("❌ Review submission failed:", error);
       console.error("리뷰 제출에 실패했습니다: " + error);
@@ -993,11 +1005,9 @@ const StoreDetailScreen: React.FC = () => {
                   className={`grid gap-3 mb-2 ${review.photos.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
                 >
                   {review.photos.map((photo, index) => {
-                    console.log(`리뷰 이미지 URL [${index}]:`, photo);
                     // photo가 객체인 경우 url 속성 사용, 문자열인 경우 그대로 사용
                     const imageUrl =
                       typeof photo === "string" ? photo : photo.url;
-                    console.log(`실제 사용할 이미지 URL [${index}]:`, imageUrl);
                     return (
                       <img
                         key={index}
@@ -1014,7 +1024,7 @@ const StoreDetailScreen: React.FC = () => {
                           (e.target as HTMLImageElement).style.display = "none";
                         }}
                         onLoad={() => {
-                          console.log(`이미지 로드 성공 [${index}]:`, imageUrl);
+                          // 이미지 로드 성공
                         }}
                       />
                     );
@@ -1127,9 +1137,9 @@ const StoreDetailScreen: React.FC = () => {
                     <img
                       src="/icons/thumbs-up.svg"
                       alt="좋아요"
-                      className="w-4 h-4"
+                      className="w-5 h-5"
                     />
-                    <span className="text-xs">{review.like_count}</span>
+                    <span className="text-[15px]">{review.like_count}</span>
                   </button>
                 )}
               </div>
@@ -1204,6 +1214,16 @@ const StoreDetailScreen: React.FC = () => {
       <UserMenu
         isOpen={isUserMenuOpen}
         onClose={() => setIsUserMenuOpen(false)}
+      />
+
+      {/* 리뷰 작성 완료 모달 */}
+      <ConfirmModal
+        open={showReviewCompleteModal}
+        variant="success"
+        message={reviewMessage}
+        okText="okay"
+        onClose={() => setShowReviewCompleteModal(false)}
+        onConfirm={() => setShowReviewCompleteModal(false)}
       />
     </div>
   );
