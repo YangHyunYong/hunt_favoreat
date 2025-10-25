@@ -1,26 +1,12 @@
 import React, { useState } from "react";
 import { BottomSheet } from "react-spring-bottom-sheet";
 import "react-spring-bottom-sheet/dist/style.css";
-import { useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import ConnectWalletButton from "../components/ConnectWalletButton";
 import UserMenu from "../components/UserMenu";
-import { useAppKitAccount } from "@reown/appkit/react";
-import { useAccount } from "wagmi";
 
 const TempScreen: React.FC = () => {
-  const { address: appKitAddress } = useAppKitAccount();
-  const { address: wagmiAddress } = useAccount();
-  const navigate = useNavigate();
-
-  // Farcaster 자동 로그인과 일반 로그인 모두 지원
-  const address = wagmiAddress || appKitAddress;
-
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-
-  const handleBack = () => {
-    navigate(-1);
-  };
 
   return (
     <div className="min-h-screen bg-white">
