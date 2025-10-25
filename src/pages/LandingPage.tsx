@@ -5,7 +5,7 @@ const LandingPage: React.FC = () => {
   const navigate = useNavigate();
 
   const handleGetStarted = () => {
-    navigate("/app");
+    navigate("/");
   };
 
   return (
