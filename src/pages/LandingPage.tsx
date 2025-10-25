@@ -8,6 +8,13 @@ const LandingPage: React.FC = () => {
     navigate("/");
   };
 
+  const handleViewOnFarcaster = () => {
+    window.open(
+      "https://farcaster.xyz/miniapps/D1uOkGuytCFh/favoreat",
+      "_blank"
+    );
+  };
+
   return (
     <div className="bg-white relative w-full min-h-screen">
       {/* Navigation */}
@@ -86,7 +93,10 @@ const LandingPage: React.FC = () => {
                     className="w-4 h-4"
                   />
                 </button>
-                <button className="bg-white border border-gray-200 text-gray-950 px-4 py-2 rounded-[14px] text-sm font-medium transition-colors flex items-center gap-2">
+                <button
+                  onClick={handleViewOnFarcaster}
+                  className="bg-white border border-gray-200 text-gray-950 px-4 py-2 rounded-[14px] text-sm font-medium transition-colors flex items-center gap-2"
+                >
                   View on Farcaster
                   <img src={"/icons/out.svg"} alt="Arrow" className="w-4 h-4" />
                 </button>
@@ -837,16 +847,26 @@ const LandingPage: React.FC = () => {
               >
                 <img src={"/icons/x-2.svg"} alt="Twitter" className="w-8 h-8" />
               </a>
-              <div className="w-10 h-10 bg-gray-100 rounded-[16px] flex items-center justify-center">
+              <a
+                href="https://github.com/YangHyunYong/hunt_favoreat"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 bg-gray-100 rounded-[16px] flex items-center justify-center"
+              >
                 <img
                   src={"/icons/github.svg"}
                   alt="GitHub"
                   className="w-5 h-5"
                 />
-              </div>
-              <div className="w-10 h-10 bg-gray-100 rounded-[16px] flex items-center justify-center">
+              </a>
+              <a
+                href="https://farcaster.xyz/miniapps/D1uOkGuytCFh/favoreat"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 bg-gray-100 rounded-[16px] flex items-center justify-center"
+              >
                 <img src={"/icons/out.svg"} alt="out" className="w-5 h-5" />
-              </div>
+              </a>
             </div>
           </div>
           {/* Quote Section */}
