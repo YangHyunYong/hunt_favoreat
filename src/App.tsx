@@ -11,8 +11,9 @@ import RecentPage from "./pages/RecentPage";
 
 function App() {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      sdk.actions.ready();
+    const timer = setTimeout(async () => {
+      await sdk.actions.ready();
+      await sdk.actions.addMiniApp();
     }, 1500);
 
     return () => clearTimeout(timer);
