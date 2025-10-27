@@ -14,7 +14,6 @@ import {
   getMyBookmarks,
   ensurePlaceExists,
 } from "../supabaseClient";
-import { RecentFeedContent } from "./RecentPage";
 
 // Google Places API placeId를 UUID로 변환하는 함수
 async function placeIdToUUID(placeId: string): Promise<string> {
@@ -546,9 +545,10 @@ const MainScreen: React.FC = () => {
 
     if (!container) return;
 
-    const ro = new ResizeObserver((entries) => {
-      const h = entries[0].contentRect.height;
-      const ratio = h / window.innerHeight;
+    const ro = new ResizeObserver(() => {
+      // 시트 높이 관찰 (필요시 사용)
+      // const h = entries[0].contentRect.height;
+      // const ratio = h / window.innerHeight;
     });
 
     ro.observe(container);
