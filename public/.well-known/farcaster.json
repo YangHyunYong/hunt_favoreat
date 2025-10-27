@@ -1,1 +1,31 @@
-{} 
+{
+    "accountAssociation": {
+      "header": "eyJmaWQiOjEwODE3NzUsInR5cGUiOiJhdXRoIiwia2V5IjoiMHg1MmMxOURkMzMyYTIzMTc4ODJlYTc2MkI2RGYwMDE2NkE5ZWEzYjk5In0",
+      "payload": "eyJkb21haW4iOiJodW50LWZhdm9yZWF0LnZlcmNlbC5hcHAifQ",
+      "signature": "rgUIDmeuHx5dxLSIJkbfPhY2o/Ul2oOA6dDUEuXHaGhI9kvQTYFKEjXe/EIe3Y1FcCCGcmJuDiP910js3bLC4hs="
+    },
+    "baseBuilder": {
+      "ownerAddress": "0xB7D16624acCFe90B18Da21Cb2B0b2358A8d8a622"
+    },
+    "miniapp": {
+      "version": "1",
+      "name": "FavorEat",
+      "homeUrl": "https://hunt-favoreat.vercel.app",
+      "iconUrl": "https://hunt-favoreat.vercel.app/logo.png",
+      "splashImageUrl": "https://hunt-favoreat.vercel.app/favoreat.gif",
+      "splashBackgroundColor": "#FF4500",
+      "webhookUrl": "https://hunt-favoreat.vercel.app/api/webhook",
+      "subtitle": "FavorEat",
+      "description": "A dApp where food reviews earn rewards.",
+      "screenshotUrls": [
+        "https://hunt-favoreat.vercel.app/screenshot.png"
+      ],
+      "primaryCategory": "social",
+      "tags": [],
+      "heroImageUrl": "https://hunt-favoreat.vercel.app/logo.png",
+      "tagline": "",
+      "ogTitle": "FavorEat",
+      "ogDescription": "A dApp where food reviews earn rewards.",
+      "ogImageUrl": "https://hunt-favoreat.vercel.app/logo.png"
+    }
+}
