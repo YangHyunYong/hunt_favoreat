@@ -11,7 +11,11 @@ import RecentPage from "./pages/RecentPage";
 
 function App() {
   useEffect(() => {
-    sdk.actions.ready();
+    const timer = setTimeout(() => {
+      sdk.actions.ready();
+    }, 1500);
+
+    return () => clearTimeout(timer);
   }, []);
 
   return (
