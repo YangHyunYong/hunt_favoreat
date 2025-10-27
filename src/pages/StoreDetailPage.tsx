@@ -116,6 +116,7 @@ const StoreDetailScreen: React.FC = () => {
   // 리뷰 데이터 상태
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   // 리뷰 작성 완료 모달 상태
   const [showReviewCompleteModal, setShowReviewCompleteModal] = useState(false);
@@ -141,6 +142,9 @@ const StoreDetailScreen: React.FC = () => {
 
   // UserMenu 상태
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // SDK Context 상태
+  const [sdkContext, setSdkContext] = useState<any>(null);
 
   // 장소 UUID 생성 (한 번만 실행)
   useEffect(() => {
@@ -352,6 +356,20 @@ const StoreDetailScreen: React.FC = () => {
     window.scrollTo(0, 0);
   }, []);
 
+  // SDK Context 로드
+  useEffect(() => {
+    const loadSdkContext = async () => {
+      try {
+        const context = await sdk.context;
+        setSdkContext(context);
+      } catch (error) {
+        console.error("SDK Context error:", error);
+      }
+    };
+
+    loadSdkContext();
+  }, []);
+
   // 현재 위치 가져오기 (MainScreen에서 온 경우에만)
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -438,7 +456,8 @@ const StoreDetailScreen: React.FC = () => {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
 
-  const canSubmit = reviewText.trim().length > 0;
+  const canSubmit =
+    myRating > 0 && reviewText.trim().length > 0 && !isSubmittingReview;
 
   // 공유 기능
   const handleShare = async () => {
@@ -522,8 +541,9 @@ const StoreDetailScreen: React.FC = () => {
   };
 
   const onSubmitReview = async () => {
-    if (!canSubmit || !address) return;
+    if (!canSubmit || !address || isSubmittingReview) return;
 
+    setIsSubmittingReview(true);
     try {
       // 1. 먼저 장소가 DB에 있는지 확인하고 없으면 생성
       let placeId: string;
@@ -629,6 +649,8 @@ const StoreDetailScreen: React.FC = () => {
     } catch (error) {
       console.error("❌ Review submission failed:", error);
       console.error("리뷰 제출에 실패했습니다: " + error);
+    } finally {
+      setIsSubmittingReview(false);
     }
   };
 
@@ -659,7 +681,7 @@ const StoreDetailScreen: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white pt-12">
       <Header
         leftElement={
           <button
@@ -732,9 +754,9 @@ const StoreDetailScreen: React.FC = () => {
             <span className="text-rating-count">({ratingCount})</span>
           </div>
           <div className="text-location-content text-gray-600">
-            At my location{" "}
-            <span className="text-location-content text-redorange-500">
-              {formatDistance(distance) || "909m"}
+            At my location
+            <span className="text-location-content text-redorange-500 ml-1">
+              {formatDistance(distance)}
             </span>
           </div>
         </div>
@@ -749,7 +771,7 @@ const StoreDetailScreen: React.FC = () => {
           >
             Write a review
           </button>
-          <div className="flex">
+          <div className="flex" onClick={openComposer}>
             {Array.from({ length: 5 }).map((_, i) => (
               <img
                 key={i}
@@ -793,10 +815,14 @@ const StoreDetailScreen: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => removeImage(i)}
-                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 flex items-center justify-center text-gray-800"
+                    className="absolute top-2 right-2 w-5 h-5 rounded-[8px] bg-gray-200 flex items-center justify-center text-gray-950"
                     aria-label="remove image"
                   >
-                    ✕
+                    <img
+                      src="/icons/close.svg"
+                      alt="Remove"
+                      className="w-4 h-4"
+                    />
                   </button>
                 </div>
               ))}
@@ -842,10 +868,10 @@ const StoreDetailScreen: React.FC = () => {
             </div>
             <button
               onClick={onSubmitReview}
-              disabled={!canSubmit}
-              className={`px-4 py-2.5 rounded-[12px] text-button-content ${canSubmit ? "bg-gray-900 text-gray-50" : "bg-gray-300 text-gray-400"}`}
+              disabled={!canSubmit || isSubmittingReview}
+              className={`px-4 py-2.5 rounded-[12px] text-button-content ${canSubmit && !isSubmittingReview ? "bg-gray-900 text-gray-50" : "bg-gray-300 text-gray-400"}`}
             >
-              Confirm
+              "Confirm"
             </button>
           </div>
         </div>
@@ -864,20 +890,40 @@ const StoreDetailScreen: React.FC = () => {
             <div key={review.id} className="px-5 py-5">
               <div className="flex items-center justify-between mb-4 relative">
                 <div className="flex items-center gap-1">
-                  <div className="w-6 h-6 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
-                    {review.author_wallet.slice(2, 4).toUpperCase()}
-                  </div>
-                  <div
-                    className={`text-review-title ${
-                      review.author_wallet.toLowerCase() ===
-                      address?.toLowerCase()
-                        ? "text-blue-700"
-                        : "text-gray-700"
-                    }`}
-                  >
-                    {review.author_wallet.slice(0, 6)}...
-                    {review.author_wallet.slice(-4)}
-                  </div>
+                  {review.author_wallet.toLowerCase() ===
+                    address?.toLowerCase() && sdkContext?.user?.pfpUrl ? (
+                    <>
+                      <img
+                        src={sdkContext.user.pfpUrl}
+                        alt="Profile"
+                        className="w-6 h-6 rounded-full"
+                      />
+                      <div className="text-review-title text-blue-700">
+                        {sdkContext.user.displayName ||
+                          sdkContext.user.username ||
+                          review.author_wallet.slice(0, 6) +
+                            "..." +
+                            review.author_wallet.slice(-4)}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-6 h-6 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
+                        {review.author_wallet.slice(2, 4).toUpperCase()}
+                      </div>
+                      <div
+                        className={`text-review-title ${
+                          review.author_wallet.toLowerCase() ===
+                          address?.toLowerCase()
+                            ? "text-blue-700"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        {review.author_wallet.slice(0, 6)}...
+                        {review.author_wallet.slice(-4)}
+                      </div>
+                    </>
+                  )}
                 </div>
                 {/* 본인 리뷰일 때만 메뉴 버튼 표시 */}
                 {review.author_wallet.toLowerCase() ===

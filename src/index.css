@@ -8,3 +8,16 @@
       @apply font-sans;
     }
   }
+
+/* 스크롤바 숨기기 */
+* {
+  /* Firefox */
+  scrollbar-width: none;
+  /* IE and Edge */
+  -ms-overflow-style: none;
+}
+
+/* Chrome, Safari, Opera */
+*::-webkit-scrollbar {
+  display: none;
+}

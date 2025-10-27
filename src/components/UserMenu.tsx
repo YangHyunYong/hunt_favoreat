@@ -169,12 +169,12 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
         <div className="flex flex-col items-center gap-12">
           {/* 프로필 + 주소 */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
+            <div className="w-10 h-10 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
               {sdkContext?.user?.pfpUrl && isConnected && !isReownConnected ? (
                 <img
                   src={sdkContext.user.pfpUrl}
                   alt="Profile"
-                  className="w-8 h-8 rounded-full"
+                  className="w-10 h-10 rounded-full"
                 />
               ) : (
                 <span className="text-[10px] font-bold">

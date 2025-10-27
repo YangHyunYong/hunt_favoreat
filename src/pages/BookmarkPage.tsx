@@ -294,7 +294,7 @@ const BookmarkScreen: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-200">
+    <div className="min-h-screen bg-gray-200 pt-12">
       <Header
         leftElement={
           <button

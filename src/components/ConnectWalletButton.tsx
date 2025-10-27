@@ -104,7 +104,7 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
     <button
       type="button"
       onClick={onOpenUserMenu}
-      className="w-8 h-8 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600"
+      className="w-10 h-10 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600"
       aria-label="User Menu"
       title={walletAddress}
     >
@@ -112,7 +112,7 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
         <img
           src={sdkContext.user.pfpUrl}
           alt="Profile"
-          className="w-8 h-8 rounded-full"
+          className="w-10 h-10 rounded-full"
         />
       ) : (
         <span className="text-[10px] font-bold">

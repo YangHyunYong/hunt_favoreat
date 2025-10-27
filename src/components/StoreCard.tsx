@@ -175,40 +175,33 @@ const StoreCard: React.FC<StoreCardProps> = ({
       </div>
 
       {/* 이미지 처리 */}
-      {photos.length === 0 ? (
+      {/* {photos.length === 0 ? (
         // 이미지가 하나도 없으면 하나의 no Image 표시
         <div className="mt-5">
           <div className="flex h-[200px] justify-center items-center bg-gray-100 text-gray-500 rounded-[24px]">
             no Image
           </div>
         </div>
-      ) : (
+      ) :  */}
+      {photos.length !== 0 && (
         // 이미지가 있으면 grid로 표시
         <div className="grid grid-cols-2 gap-4 mt-5">
           <div className="rounded-[24px] overflow-hidden h-[136px]">
-            {img1 ? (
+            {img1 && (
               <img
                 src={img1}
                 alt="photo 1"
                 className="w-full h-[136px] object-cover"
               />
-            ) : (
-              <div className="flex h-[136px] justify-center items-center bg-gray-100 text-gray-500 rounded-[24px]">
-                no Image
-              </div>
             )}
           </div>
           <div className="rounded-[24px] overflow-hidden h-[136px]">
-            {img2 ? (
+            {img2 && (
               <img
                 src={img2}
                 alt="photo 2"
                 className="w-full h-[136px] object-cover"
               />
-            ) : (
-              <div className="flex h-[136px] justify-center items-center bg-gray-100 text-gray-500 rounded-[24px]">
-                no Image
-              </div>
             )}
           </div>
         </div>
@@ -220,9 +213,9 @@ const StoreCard: React.FC<StoreCardProps> = ({
           <Stars rating={rating} />
           <span className="text-rating-count">({ratingCount})</span>
         </div>
-        <div className="text-gray-500 text-body-content">
+        <div className="text-location-content text-gray-600">
           At my location
-          <span className="text-orange-500 font-semibold ml-1">
+          <span className="text-location-content text-redorange-500 ml-1">
             {formatDistance(distanceMeters)}
           </span>
         </div>

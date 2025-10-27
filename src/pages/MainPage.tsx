@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { BottomSheet } from "react-spring-bottom-sheet";
 import "react-spring-bottom-sheet/dist/style.css";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import Header from "../components/Header";
 import ConnectWalletButton from "../components/ConnectWalletButton";
 import UserMenu from "../components/UserMenu";
+import Navigator, { TabType } from "../components/Navigator";
 import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import {
@@ -13,6 +14,7 @@ import {
   getMyBookmarks,
   ensurePlaceExists,
 } from "../supabaseClient";
+import { RecentFeedContent } from "./RecentPage";
 
 // Google Places API placeId를 UUID로 변환하는 함수
 async function placeIdToUUID(placeId: string): Promise<string> {
@@ -52,6 +54,7 @@ async function placeIdToUUID(placeId: string): Promise<string> {
 interface MapViewProps {
   onLocationResolved: (city: string, town: string) => void;
   onPlaceSelected?: (details: PlaceDetailsResult) => void;
+  onMapLocationChanged?: (location: { lat: number; lng: number }) => void;
 }
 
 interface PlaceDetailsResult {
@@ -139,7 +142,11 @@ export async function fetchPlaceDetails(
   });
 }
 
-function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
+function MapView({
+  onLocationResolved,
+  onPlaceSelected,
+  onMapLocationChanged,
+}: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
 
   // 지도/마커를 보존하는 ref (재초기화 방지)
@@ -149,12 +156,16 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
   // 최신 콜백 보존
   const onLocationResolvedRef = useRef(onLocationResolved);
   const onPlaceSelectedRef = useRef(onPlaceSelected);
+  const onMapLocationChangedRef = useRef(onMapLocationChanged);
   useEffect(() => {
     onLocationResolvedRef.current = onLocationResolved;
   }, [onLocationResolved]);
   useEffect(() => {
     onPlaceSelectedRef.current = onPlaceSelected;
   }, [onPlaceSelected]);
+  useEffect(() => {
+    onMapLocationChangedRef.current = onMapLocationChanged;
+  }, [onMapLocationChanged]);
 
   // 빠른 연속 클릭 대비 최신 요청만 반영하기 위한 토큰
   const latestReqId = useRef(0);
@@ -180,7 +191,6 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
 
         const script = document.createElement("script");
         const apiKey = import.meta.env.VITE_GOOGLE_MAP_API_KEY;
-        // ✅ 기존 places 라이브러리 사용 (비용 절약)
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=en&region=US`;
         script.async = true;
         script.onerror = () => {
@@ -330,6 +340,9 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
                 gMapRef.current?.setZoom(18);
                 markerRef.current?.setPosition(latLng);
 
+                // 지도 위치 변경 콜백 호출
+                onMapLocationChangedRef.current?.(latLng);
+
                 // 역지오코딩으로 City/Town 갱신
                 const geocoder = new google.maps.Geocoder();
                 geocoder.geocode(
@@ -424,11 +437,15 @@ function MapView({ onLocationResolved, onPlaceSelected }: MapViewProps) {
   }, []);
 
   return (
-    <div ref={mapDivRef} className="w-full h-[100svh] md:h-screen relative" />
+    <div
+      ref={mapDivRef}
+      className="w-full h-[calc(100svh-3rem)] md:h-[calc(100vh-3rem)] relative"
+    />
   );
 }
 
 const MainScreen: React.FC = () => {
+  const location = useLocation();
   const [cityName, setCityName] = useState("");
   const { address: appKitAddress } = useAppKitAccount();
   const { address: wagmiAddress } = useAccount();
@@ -444,6 +461,11 @@ const MainScreen: React.FC = () => {
 
   // 🔹 Map/Grid 활성 상태 관리
   const [viewMode, setViewMode] = useState<"map" | "grid">("map");
+
+  // Navigator 탭 상태 (location.state에서 activeTab 가져오기)
+  const [activeTab, setActiveTab] = useState<TabType>(
+    (location.state as { activeTab?: TabType })?.activeTab || "recent"
+  );
 
   const navigate = useNavigate();
 
@@ -527,11 +549,6 @@ const MainScreen: React.FC = () => {
     const ro = new ResizeObserver((entries) => {
       const h = entries[0].contentRect.height;
       const ratio = h / window.innerHeight;
-
-      // showContent는 selectedPlace에서 제어하므로 여기서 토글하지 않음
-      if (ratio >= 0.98) {
-        navigate("/store/123");
-      }
     });
 
     ro.observe(container);
@@ -549,14 +566,14 @@ const MainScreen: React.FC = () => {
     setIsBookmarked(false);
   }, [address]);
 
-  // 장소 선택 시: 콘텐츠 표시 + 중간 스냅(0.42 높이)
+  // 장소 선택 시: 콘텐츠 표시 + 중간 스냅(0.46 높이)
   useEffect(() => {
     if (!selectedPlace) return;
 
     setShowContent(true);
 
     const snapMiddle = () => {
-      const targetPx = Math.round(window.innerHeight * 0.42);
+      const targetPx = Math.round(window.innerHeight * 0.46);
       if (sheetRef.current?.snapTo) {
         try {
           sheetRef.current.snapTo(targetPx); // px 우선
@@ -646,11 +663,7 @@ const MainScreen: React.FC = () => {
     return (
       <div className="grid grid-cols-2 gap-4 mb-4">
         {/* 첫 번째 칸 */}
-        {!img1 || err1 ? (
-          <div className="flex h-[136px] justify-center items-center rounded-[16px] bg-gray-200 text-gray-500 text-location-content">
-            no Image
-          </div>
-        ) : (
+        {img1 && (
           <img
             src={img1}
             alt="Place photo 1"
@@ -662,11 +675,7 @@ const MainScreen: React.FC = () => {
         )}
 
         {/* 두 번째 칸 */}
-        {!img2 || err2 ? (
-          <div className="flex h-[136px] justify-center items-center rounded-2xl bg-gray-200 text-gray-500">
-            no Image
-          </div>
-        ) : (
+        {img2 && (
           <img
             src={img2}
             alt="Place photo 2"
@@ -836,184 +845,217 @@ const MainScreen: React.FC = () => {
   return (
     <div>
       <Header
-        leftElement={<div></div>}
+        leftElement={
+          <button
+            onClick={() => navigate("/")}
+            className="flex items-center gap-[2px]"
+          >
+            <img
+              src="/icons/icon-filled.svg"
+              alt="Logo"
+              className="h-[30.75px] w-auto"
+            />
+            <img
+              src="/icons/favoreat.svg"
+              alt="Favoreat"
+              className="h-[14px] w-auto"
+            />
+          </button>
+        }
         rightElement={
           <ConnectWalletButton onOpenUserMenu={() => setIsUserMenuOpen(true)} />
         }
-        centerElement={
-          <div className="flex items-center gap-0.5 text-redorange-500 text-rating-count">
-            <img src="/icons/logo.svg" alt="FavorEat" className="w-6 h-6" />
-            FavorEat
-          </div>
-        }
       />
 
-      <div className="h-screen overflow-visible bg-white flex flex-col font-sans relative">
-        {/* 지도 영역 */}
-        <MapView
-          onLocationResolved={(city, town) => {
-            setCityName(city);
-            setTownName(town);
-          }}
-          onPlaceSelected={(details) => {
-            setSelectedPlace(details); // 프리로드 완료 후 전달됨
-          }}
-        />
+      <Navigator activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* 상단 */}
-        <div className="absolute top-0 left-0 w-full z-10 p-4 pointer-events-none">
-          {/* 1줄: City / Town 라벨 (항상 표시) */}
-          <div className="pointer-events-auto">
-            <div className="text-title-600 text-gray-800 inline-block px-2 py-1 rounded-lg">
-              {cityName || "City Name"}
-            </div>
-            <div className="text-display-700 text-gray-800 mt-4 px-2">
-              {townName || "Town Name"}
-            </div>
-          </div>
+      {/* Recent 탭 */}
+      {activeTab === "recent" && (
+        // <div className="pt-24 bg-gray-100 min-h-screen">
+        //   <RecentFeedContent />
+        // </div>
+        <div className="pt-24 bg-gray-100 min-h-screen flex items-center justify-center">
+          <p className="text-[18px] font-semibold text-gray-700">
+            준비중 입니다.
+          </p>
+        </div>
+      )}
 
-          {/* 2줄: 좌측 검색 입력 + 우측 버튼 묶음 (버튼과 같은 높이) */}
-          <div className="mt-2 flex items-center justify-between gap-2 pointer-events-none">
-            {/* 좌측: 검색 입력 (searchOpen 일 때만 표시) */}
-            <div className="pointer-events-auto flex-1 min-w-0">
-              {searchOpen && (
-                <div className="h-10 flex items-center gap-2 bg-white rounded-[16px] shadow-[0_0_6px_0_rgba(0,0,0,0.16)] px-3">
+      {/* Near me 탭 (지도) */}
+      {activeTab === "near-me" && (
+        <div className="h-screen overflow-visible bg-white flex flex-col font-sans relative pt-24">
+          {/* 지도 영역 */}
+          <MapView
+            onLocationResolved={(city, town) => {
+              setCityName(city);
+              setTownName(town);
+            }}
+            onPlaceSelected={(details) => {
+              setSelectedPlace(details); // 프리로드 완료 후 전달됨
+            }}
+            onMapLocationChanged={(location) => {
+              // 검색 결과 선택으로 지도 위치가 변경되면 currentLocation 업데이트
+              setCurrentLocation(location);
+              console.log("지도 위치 변경됨:", location);
+            }}
+          />
+
+          {/* 상단 */}
+          <div className="absolute top-12 left-0 w-full z-10 p-4 pointer-events-none">
+            {/* 1줄: City / Town 라벨 (항상 표시) */}
+            <div className="pointer-events-auto">
+              <div className="text-title-600 text-gray-800 inline-block px-2 py-1 rounded-lg">
+                {cityName}
+              </div>
+              <div className="text-display-700 text-gray-800 mt-4 px-2">
+                {townName}
+              </div>
+            </div>
+
+            {/* 2줄: 좌측 검색 입력 + 우측 버튼 묶음 (버튼과 같은 높이) */}
+            <div className="mt-2 flex items-center justify-between gap-2 pointer-events-none">
+              {/* 좌측: 검색 입력 (searchOpen 일 때만 표시) */}
+              <div className="pointer-events-auto flex-1 min-w-0">
+                {searchOpen && (
+                  <div className="h-10 flex items-center gap-2 bg-white rounded-[16px] shadow-[0_0_6px_0_rgba(0,0,0,0.16)] px-3">
+                    <img
+                      src="/icons/search-lg.svg"
+                      className="w-4 h-4 opacity-80"
+                    />
+                    <input
+                      ref={inputRef}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="가게 이름 또는 주소 검색"
+                      className="flex-1 h-full outline-none bg-transparent text-[14px] leading-[20px] placeholder:text-gray-400"
+                    />
+                    {!!query && (
+                      <button
+                        onClick={() => setQuery("")}
+                        className="p-1 rounded-[8px] hover:bg-gray-100"
+                        aria-label="Clear"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 우측: 액션 버튼 묶음 (항상 표시) */}
+              <div className="pointer-events-auto flex justify-center items-center gap-2">
+                {/* Search 버튼 */}
+                <button
+                  onClick={() => setSearchOpen((v) => !v)}
+                  className="flex justify-center items-center w-10 h-10 p-2 bg-white rounded-[16px] shadow-[0_0_4px_0_rgba(0,0,0,0.24)]"
+                  aria-label="Search"
+                >
                   <img
                     src="/icons/search-lg.svg"
+                    alt="Search"
                     className="w-4 h-4 opacity-80"
                   />
-                  <input
-                    ref={inputRef}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="가게 이름 또는 주소 검색"
-                    className="flex-1 h-full outline-none bg-transparent text-[14px] leading-[20px] placeholder:text-gray-400"
-                  />
-                  {!!query && (
-                    <button
-                      onClick={() => setQuery("")}
-                      className="p-1 rounded-[8px] hover:bg-gray-100"
-                      aria-label="Clear"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                </button>
 
-            {/* 우측: 액션 버튼 묶음 (항상 표시) */}
-            <div className="pointer-events-auto flex justify-center items-center gap-2">
-              {/* Search 버튼 */}
-              <button
-                onClick={() => setSearchOpen((v) => !v)}
-                className="flex justify-center items-center w-10 h-10 p-2 bg-white rounded-[16px] shadow-[0_0_4px_0_rgba(0,0,0,0.24)]"
-                aria-label="Search"
-              >
-                <img
-                  src="/icons/search-lg.svg"
-                  alt="Search"
-                  className="w-4 h-4 opacity-80"
-                />
-              </button>
-
-              {/* Map/Grid 토글 */}
-              <div className="flex items-center gap-0.5 bg-gray-100 rounded-[16px]">
-                <button
-                  data-active={viewMode === "map"}
-                  onClick={() => setViewMode("map")}
-                  className="
+                {/* Map/Grid 토글 */}
+                <div className="flex items-center gap-0.5 bg-gray-100 rounded-[16px]">
+                  <button
+                    data-active={viewMode === "map"}
+                    onClick={() => setViewMode("map")}
+                    className="
             flex justify-center items-center w-10 h-10
             p-2 rounded-[16px] data-[active=true]:shadow-[0_0_4px_0_rgba(0,0,0,0.24)]
             data-[active=true]:bg-white data-[active=false]:bg-gray-100 
             transition-colors
           "
-                  aria-pressed={viewMode === "map"}
-                  aria-label="Map"
-                >
-                  <img
-                    src="/icons/map-01.svg"
-                    alt="Map"
-                    className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
-                  />
-                </button>
+                    aria-pressed={viewMode === "map"}
+                    aria-label="Map"
+                  >
+                    <img
+                      src="/icons/map-01.svg"
+                      alt="Map"
+                      className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
+                    />
+                  </button>
 
-                <button
-                  data-active={viewMode === "grid"}
-                  onClick={() =>
-                    navigate("/stores", {
-                      state: {
-                        cityName,
-                        townName,
-                        userLocation: currentLocation || {
-                          lat: 37.37,
-                          lng: 126.9562,
+                  <button
+                    data-active={viewMode === "grid"}
+                    onClick={() =>
+                      navigate("/stores", {
+                        state: {
+                          cityName,
+                          townName,
+                          userLocation: currentLocation || {
+                            lat: 37.37,
+                            lng: 126.9562,
+                          },
                         },
-                      },
-                    })
-                  }
-                  className="
+                      })
+                    }
+                    className="
             flex justify-center items-center w-10 h-10
             p-2 rounded-[16px] data-[active=true]:shadow-[0_0_4px_0_rgba(0,0,0,0.24)]
             data-[active=true]:bg-white data-[active=false]:bg-gray-100
             transition-colors
           "
-                  aria-pressed={viewMode === "grid"}
-                  aria-label="Grid"
-                >
-                  <img
-                    src="/icons/grid-01.svg"
-                    alt="Grid"
-                    className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
-                  />
-                </button>
+                    aria-pressed={viewMode === "grid"}
+                    aria-label="Grid"
+                  >
+                    <img
+                      src="/icons/grid-01.svg"
+                      alt="Grid"
+                      className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
+                    />
+                  </button>
+                </div>
               </div>
             </div>
+
+            {/* 자동완성 리스트: 입력 아래에 전체폭으로 표시 */}
+            {searchOpen && (
+              <div className="pointer-events-auto mt-2 bg-white rounded-[16px] shadow-[0_2px_10px_rgba(0,0,0,0.12)] overflow-hidden max-h-[50vh] overflow-y-auto">
+                {loadingPred && (
+                  <div className="px-3 py-3 text-sm text-gray-500">
+                    검색 중…
+                  </div>
+                )}
+                {!loadingPred && predictions.length === 0 && query && (
+                  <div className="px-3 py-3 text-sm text-gray-500">
+                    결과가 없습니다
+                  </div>
+                )}
+                {predictions.map((p: any) => (
+                  <button
+                    key={p.place_id}
+                    onClick={() => {
+                      console.log("🔍 검색 결과 클릭:", {
+                        placeId: p.place_id,
+                        prediction: p,
+                      });
+                      window.dispatchEvent(
+                        new CustomEvent("fe:panToPlaceId", {
+                          detail: { placeId: p.place_id },
+                        })
+                      );
+                      sessionTokenRef.current = null;
+                      setSearchOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-3 hover:bg-gray-50"
+                  >
+                    <div className="text-[14px] font-semibold text-gray-900 line-clamp-1">
+                      {p.structured_formatting?.main_text || p.description}
+                    </div>
+                    <div className="text-[12px] text-gray-500 line-clamp-1">
+                      {p.structured_formatting?.secondary_text || ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* 자동완성 리스트: 입력 아래에 전체폭으로 표시 */}
-          {searchOpen && (
-            <div className="pointer-events-auto mt-2 bg-white rounded-[16px] shadow-[0_2px_10px_rgba(0,0,0,0.12)] overflow-hidden max-h-[50vh] overflow-y-auto">
-              {loadingPred && (
-                <div className="px-3 py-3 text-sm text-gray-500">검색 중…</div>
-              )}
-              {!loadingPred && predictions.length === 0 && query && (
-                <div className="px-3 py-3 text-sm text-gray-500">
-                  결과가 없습니다
-                </div>
-              )}
-              {predictions.map((p: any) => (
-                <button
-                  key={p.place_id}
-                  onClick={() => {
-                    console.log("🔍 검색 결과 클릭:", {
-                      placeId: p.place_id,
-                      prediction: p,
-                    });
-                    window.dispatchEvent(
-                      new CustomEvent("fe:panToPlaceId", {
-                        detail: { placeId: p.place_id },
-                      })
-                    );
-                    sessionTokenRef.current = null;
-                    setSearchOpen(false);
-                  }}
-                  className="w-full text-left px-3 py-3 hover:bg-gray-50"
-                >
-                  <div className="text-[14px] font-semibold text-gray-900 line-clamp-1">
-                    {p.structured_formatting?.main_text || p.description}
-                  </div>
-                  <div className="text-[12px] text-gray-500 line-clamp-1">
-                    {p.structured_formatting?.secondary_text || ""}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* FAB */}
-        {/* {!showContent && (
+          {/* FAB */}
+          {/* {!showContent && (
           <button
             className="absolute bottom-24 right-4 z-10 p-4 bg-orange-400 hover:bg-orange-500 rounded-[24px] flex items-center justify-center "
             aria-label="Add"
@@ -1026,86 +1068,103 @@ const MainScreen: React.FC = () => {
           </button>
         )} */}
 
-        {/* Bottom Sheet (0.075 / 0.42 / 1.0 단계) */}
-        <div ref={sheetHostRef}>
-          <BottomSheet
-            ref={sheetRef}
-            open={true}
-            blocking={false}
-            snapPoints={({ maxHeight }) => [0.08 * maxHeight, 0.42 * maxHeight]}
-            defaultSnap={({ snapPoints }) => snapPoints[0]}
-            onDismiss={() => {}}
-          >
-            {!showContent ? (
-              // 0.42 미만: 프리뷰
-              <div className="p-3">
-                <p className="text-center text-sm text-gray-500">
-                  지도를 탭해 주변 가게를 선택하세요
-                </p>
-              </div>
-            ) : (
-              // 0.42 이상: 이미지 카드/별점/버튼
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-place-title leading-snug flex-1 min-w-0 line-clamp-2">
-                    {heroTitle}
-                  </div>
-                  <div className="flex gap-2 flex-none shrink-0">
-                    <button
-                      onClick={handleShare}
-                      className="p-3 bg-gray-100 hover:bg-gray-200 rounded-[16px] transition-colors"
-                      title="공유하기"
-                    >
-                      <img src="/icons/share-07.svg" className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleBookmarkToggle}
-                      className={`p-3 rounded-[16px] transition-colors ${
-                        isBookmarked
-                          ? "bg-redorange-100 hover:bg-redorange-200"
-                          : "bg-gray-100 hover:bg-gray-200"
-                      }`}
-                      title={isBookmarked ? "북마크 해제" : "북마크 추가"}
-                    >
-                      <img
-                        src={
+          {/* Bottom Sheet (0.075 / 0.46 / 1.0 단계) */}
+          <div ref={sheetHostRef}>
+            <BottomSheet
+              ref={sheetRef}
+              open={true}
+              blocking={false}
+              snapPoints={({ maxHeight }) => {
+                if (!selectedPlace) {
+                  return [0.08 * maxHeight];
+                }
+                return [0.08 * maxHeight, 0.46 * maxHeight];
+              }}
+              defaultSnap={({ snapPoints }) => snapPoints[0]}
+              onDismiss={() => {}}
+            >
+              {!showContent ? (
+                // 0.46 미만: 프리뷰
+                <div className="p-3">
+                  <p className="text-center text-sm text-gray-500">
+                    지도를 탭해 주변 가게를 선택하세요
+                  </p>
+                </div>
+              ) : (
+                // 0.46 이상: 이미지 카드/별점/버튼
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-place-title leading-snug flex-1 min-w-0 line-clamp-2 mr-1">
+                      {heroTitle}
+                    </div>
+                    <div className="flex gap-2 flex-none shrink-0">
+                      <button
+                        onClick={handleShare}
+                        className="p-3 bg-gray-100 hover:bg-gray-200 rounded-[16px] transition-colors"
+                        title="공유하기"
+                      >
+                        <img src="/icons/share-07.svg" className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={handleBookmarkToggle}
+                        className={`p-3 rounded-[16px] transition-colors ${
                           isBookmarked
-                            ? "/icons/bookmark-added.svg"
-                            : "/icons/bookmark.svg"
-                        }
-                        className="w-4 h-4"
-                      />
+                            ? "bg-redorange-100 hover:bg-redorange-200"
+                            : "bg-gray-100 hover:bg-gray-200"
+                        }`}
+                        title={isBookmarked ? "북마크 해제" : "북마크 추가"}
+                      >
+                        <img
+                          src={
+                            isBookmarked
+                              ? "/icons/bookmark-added.svg"
+                              : "/icons/bookmark.svg"
+                          }
+                          className="w-4 h-4"
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 이미지 2개 */}
+                  <PhotosBlock img1={img1} img2={img2} />
+
+                  {/* 별점 + 리뷰수 + 버튼 */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Stars rating={rating} />
+                      <span className="text-rating-count">({ratingCount})</span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (!selectedPlace) return;
+                        const slug = toSlug(
+                          selectedPlace.displayName || "store"
+                        );
+                        navigate(`/store/${slug}`, { state: selectedPlace });
+                      }}
+                      className="px-4 py-2.5 bg-black text-white rounded-xl font-semibold flex items-center gap-2"
+                    >
+                      <span className="text-button-content">View Details</span>
+                      <span>→</span>
                     </button>
                   </div>
                 </div>
-
-                {/* 이미지 2개 */}
-                <PhotosBlock img1={img1} img2={img2} />
-
-                {/* 별점 + 리뷰수 + 버튼 */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Stars rating={rating} />
-                    <span className="text-rating-count">({ratingCount})</span>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      if (!selectedPlace) return;
-                      const slug = toSlug(selectedPlace.displayName || "store");
-                      navigate(`/store/${slug}`, { state: selectedPlace });
-                    }}
-                    className="px-4 py-2.5 bg-black text-white rounded-xl font-semibold flex items-center gap-2"
-                  >
-                    <span className="text-button-content">View Details</span>
-                    <span>→</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </BottomSheet>
+              )}
+            </BottomSheet>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Leaderboard 탭 */}
+      {activeTab === "leaderboard" && (
+        <div className="pt-24 bg-gray-100 min-h-screen flex items-center justify-center">
+          <p className="text-[18px] font-semibold text-gray-700">
+            준비중 입니다.
+          </p>
+        </div>
+      )}
 
       {/* UserMenu */}
       <UserMenu

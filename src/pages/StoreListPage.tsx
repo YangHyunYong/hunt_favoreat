@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Header from "../components/Header";
 import StoreCard from "../components/StoreCard";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -432,33 +432,8 @@ const StoreListScreen: React.FC = () => {
     };
   }, [navigate]);
 
-  // 샘플 대체(검색 결과 없을 때만)
-  const fallbackItems = useMemo<Item[]>(
-    () => [
-      {
-        title: "Burger Boy and Burger girl are dancing now",
-        photos: ["/sample/burger.jpg", "/sample/bibimbap.jpg"],
-        rating: 4,
-        ratingCount: 12,
-        distanceMeters: 909,
-        storeName: "패스트푸드",
-        addressPreview:
-          "서울 마포구 어울마당로 65 성수길 뭐시기 서울 마포구 어울마당로 65 성수길 뭐시기 주소 두 줄 이상일 때 말 줄임표...",
-        bookmarked: false,
-        onToggleBookmark: () => {},
-        onViewDetails: () => {
-          const slug = toSlug("Burger Boy and Burger girl are dancing now");
-          navigate(`/store/${slug}`);
-        },
-      },
-    ],
-    [navigate]
-  );
-
-  const listToRender = items.length ? items : !loading ? fallbackItems : [];
-
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 pt-12">
       {/* 상단 헤더 */}
       <Header
         leftElement={<div></div>}
@@ -478,10 +453,10 @@ const StoreListScreen: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
             <div className="text-location-content-700 text-gray-800">
-              {cityName || "City Name"}
+              {cityName}
             </div>
             <div className="text-location-content-700 text-gray-800">
-              {townName || "Town Name"}
+              {townName}
             </div>
           </div>
 
@@ -503,7 +478,11 @@ const StoreListScreen: React.FC = () => {
               {/* Map (비활성) -> 메인으로 이동 */}
               <button
                 data-active={viewMode === "map"}
-                onClick={() => navigate("/", { state: { cityName, townName } })}
+                onClick={() =>
+                  navigate("/main", {
+                    state: { activeTab: "near-me", cityName, townName },
+                  })
+                }
                 className="
                   flex justify-center items-center w-10 h-10
                   p-2 rounded-[16px] data-[active=true]:shadow-[0_0_4px_0_rgba(0,0,0,0.24)]
@@ -551,8 +530,8 @@ const StoreListScreen: React.FC = () => {
               <div className="text-gray-600 mb-2">주변 가게 검색 중...</div>
             </div>
           </div>
-        ) : listToRender.length > 0 ? (
-          listToRender.map((it, idx) => (
+        ) : items.length > 0 ? (
+          items.map((it, idx) => (
             <StoreCard key={idx} {...it} onViewDetails={it.onViewDetails} />
           ))
         ) : (
