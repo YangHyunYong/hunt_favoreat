@@ -311,12 +311,128 @@ const StoreDetailScreen: React.FC = () => {
     const selected = Array.from(files).slice(0, remain);
 
     // 파일명을 안전한 형태로 변환
-    const safeFiles = selected.map((file) => {
-      const timestamp = Date.now();
-      const extension = file.name.split(".").pop() || "jpg";
-      const safeName = `review-${timestamp}.${extension}`;
-      return new File([file], safeName, { type: file.type });
-    });
+    const safeFiles = selected
+      .filter((file) => {
+        // 이미지 파일 타입 검증
+        // 모바일에서 MIME 타입이 비어있을 수 있으므로 파일명이나 크기로도 확인
+        const hasImageMime = file.type.startsWith("image/");
+        const hasImageExtension =
+          /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/i.test(file.name);
+        const hasValidSize = file.size > 0;
+
+        if (!hasImageMime && !hasImageExtension) {
+          console.warn(
+            "이미지 파일이 아닙니다:",
+            file.name,
+            file.type,
+            file.size
+          );
+          return false;
+        }
+
+        if (!hasValidSize) {
+          console.warn("파일 크기가 0입니다:", file.name);
+          return false;
+        }
+
+        return true;
+      })
+      .map((file, index) => {
+        const timestamp = Date.now();
+
+        // 파일 확장자 추출 (대소문자 구분 없이)
+        let extension = "jpg"; // 기본값
+        const fileName = file.name.toLowerCase();
+        const lastDotIndex = fileName.lastIndexOf(".");
+
+        if (lastDotIndex > 0 && lastDotIndex < fileName.length - 1) {
+          const ext = fileName.substring(lastDotIndex + 1);
+          // 허용된 이미지 확장자 목록
+          const allowedExtensions = [
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "webp",
+            "bmp",
+            "heic",
+            "heif",
+          ];
+
+          if (allowedExtensions.includes(ext)) {
+            extension = ext === "jpeg" ? "jpg" : ext; // jpeg를 jpg로 통일
+          } else {
+            // MIME 타입에서 확장자 추출 시도
+            const mimeToExt: { [key: string]: string } = {
+              "image/jpeg": "jpg",
+              "image/jpg": "jpg",
+              "image/png": "png",
+              "image/gif": "gif",
+              "image/webp": "webp",
+              "image/bmp": "bmp",
+              "image/heic": "jpg", // HEIC는 브라우저에서 제대로 표시 안될 수 있어 jpg로 변환 권장
+              "image/heif": "jpg", // HEIF도 마찬가지
+              // 모바일에서 자주 나타나는 MIME 타입들
+              "": "jpg", // MIME 타입이 없는 경우
+            };
+            extension = mimeToExt[file.type.toLowerCase()] || "jpg";
+            console.warn(
+              `알 수 없는 확장자: ${ext}, MIME 타입: ${file.type || "없음"}, 추출된 확장자: ${extension}`
+            );
+          }
+        } else {
+          // 확장자가 없는 경우 MIME 타입에서 추출
+          const mimeToExt: { [key: string]: string } = {
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/png": "png",
+            "image/gif": "gif",
+            "image/webp": "webp",
+            "image/bmp": "bmp",
+            "image/heic": "jpg", // HEIC는 jpg로 변환
+            "image/heif": "jpg", // HEIF도 jpg로 변환
+            "": "jpg", // MIME 타입이 없는 경우
+          };
+          extension = mimeToExt[file.type.toLowerCase()] || "jpg";
+          console.warn(
+            `확장자가 없는 파일: ${file.name}, MIME 타입: ${file.type || "없음"}, 추출된 확장자: ${extension}`
+          );
+        }
+
+        // HEIC/HEIF 파일은 브라우저에서 제대로 표시되지 않을 수 있으므로
+        // 실제로는 jpg로 변환하는 것이 좋지만, 여기서는 확장자만 변경
+        // (실제 변환은 서버나 클라이언트 라이브러리가 필요)
+        if (extension === "heic" || extension === "heif") {
+          console.warn(
+            "HEIC/HEIF 파일 감지. 일부 브라우저에서 표시되지 않을 수 있습니다:",
+            file.name
+          );
+        }
+
+        // 고유한 파일명 생성 (같은 타임스탬프 방지)
+        const uniqueName = `review-${timestamp}-${index}.${extension}`;
+
+        // MIME 타입이 없거나 잘못된 경우 기본값 설정
+        let fileType = file.type;
+        if (!fileType || fileType === "") {
+          const extToMime: { [key: string]: string } = {
+            jpg: "image/jpeg",
+            jpeg: "image/jpeg",
+            png: "image/png",
+            gif: "image/gif",
+            webp: "image/webp",
+            bmp: "image/bmp",
+          };
+          fileType = extToMime[extension] || "image/jpeg";
+        }
+
+        return new File([file], uniqueName, { type: fileType });
+      });
+
+    if (safeFiles.length === 0) {
+      console.error("유효한 이미지 파일이 없습니다.");
+      return;
+    }
 
     const urls = safeFiles.map((f) => URL.createObjectURL(f));
     setReviewImages((prev) => [...prev, ...urls]);
@@ -871,7 +987,7 @@ const StoreDetailScreen: React.FC = () => {
               disabled={!canSubmit || isSubmittingReview}
               className={`px-4 py-2.5 rounded-[12px] text-button-content ${canSubmit && !isSubmittingReview ? "bg-gray-900 text-gray-50" : "bg-gray-300 text-gray-400"}`}
             >
-              "Confirm"
+              Confirm
             </button>
           </div>
         </div>
