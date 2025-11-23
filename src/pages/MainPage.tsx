@@ -385,10 +385,20 @@ function MapView({
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
-          gestureHandling: "cooperative", // 한 손가락은 페이지/지도 스크롤, 두 손가락 핀치로만 확대/축소
+          gestureHandling: "greedy", // 모바일: 한 손가락으로 지도 이동, 두 손가락 핀치로만 확대/축소
           disableDoubleClickZoom: true, // 더블 클릭 확대 비활성화
         });
         gMapRef.current = gMap;
+
+        // 모바일 제스처 제어: 한 손가락은 팬만, 브라우저 줌 제스처는 막기
+        if (mapDivRef.current) {
+          const gestureLayer =
+            (mapDivRef.current.querySelector(".gm-style") as HTMLElement) ||
+            (mapDivRef.current.firstElementChild as HTMLElement | null);
+          if (gestureLayer) {
+            gestureLayer.style.touchAction = "pan-x pan-y";
+          }
+        }
 
         // geolocation은 비동기로 처리하여 지도 표시를 블로킹하지 않음
         if ("geolocation" in navigator) {
@@ -610,7 +620,6 @@ function MapView({
     <div
       ref={mapDivRef}
       className="w-full h-[calc(100svh-3rem)] md:h-[calc(100vh-3rem)] relative"
-      style={{ touchAction: "none" }}
     />
   );
 }
