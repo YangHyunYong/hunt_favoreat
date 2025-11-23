@@ -386,6 +386,7 @@ function MapView({
           fullscreenControl: false,
           streetViewControl: false,
           gestureHandling: "cooperative", // 두 손가락으로만 확대/축소, 한 손가락으로는 지도 이동
+          scrollwheel: false,
           disableDoubleClickZoom: true, // 더블 클릭 확대 비활성화
         });
         gMapRef.current = gMap;
