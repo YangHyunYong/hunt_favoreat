@@ -17,6 +17,7 @@ import {
 } from "../supabaseClient";
 import RecentFeed from "../components/RecentFeed";
 import Leaderboard from "../components/Leaderboard";
+import { sdk } from "@farcaster/miniapp-sdk";
 
 // Google Places API placeId를 UUID로 변환하는 함수
 async function placeIdToUUID(placeId: string): Promise<string> {
@@ -658,27 +659,40 @@ const MainScreen: React.FC = () => {
     fetchCurrentLocation();
   }, []);
 
-  // users 테이블에서 user_pfp_url 가져오기
+  // user_pfp_url 가져오기 (ConnectWalletButton.tsx와 동일한 로직 - 백엔드 조회 최소화)
   useEffect(() => {
     const fetchUserPfpUrl = async () => {
-      if (address) {
-        try {
-          const { data, error } = await supabase
-            .from("users")
-            .select("user_pfp_url")
-            .eq("wallet_address", address.toLowerCase())
-            .single();
+      if (!address) {
+        setUserPfpUrl(null);
+        return;
+      }
 
-          if (!error && data?.user_pfp_url) {
-            setUserPfpUrl(data.user_pfp_url);
-          } else {
-            setUserPfpUrl(null);
+      try {
+        // 1. 먼저 Farcaster SDK에서 가져오기 (빠름, 백엔드 조회 없음)
+        try {
+          const context = await sdk.context;
+          if (context?.user?.pfpUrl) {
+            setUserPfpUrl(context.user.pfpUrl);
+            return;
           }
-        } catch (error) {
-          console.error("user_pfp_url 조회 실패:", error);
+        } catch (sdkError) {
+          // SDK context가 없으면 무시하고 다음 단계로
+        }
+
+        // 2. SDK에 없으면 users 테이블에서 가져오기 (백엔드 조회)
+        const { data, error } = await supabase
+          .from("users")
+          .select("user_pfp_url")
+          .eq("wallet_address", address.toLowerCase())
+          .single();
+
+        if (!error && data?.user_pfp_url) {
+          setUserPfpUrl(data.user_pfp_url);
+        } else {
           setUserPfpUrl(null);
         }
-      } else {
+      } catch (error) {
+        // console.error("user_pfp_url 조회 실패:", error);
         setUserPfpUrl(null);
       }
     };

@@ -92,7 +92,7 @@ const Leaderboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="pt-28 bg-gray-100 min-h-screen flex items-center justify-center">
         <p className="text-[18px] font-semibold text-gray-700">Loading...</p>
       </div>
     );
