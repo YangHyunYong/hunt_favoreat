@@ -385,7 +385,7 @@ function MapView({
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
-          gestureHandling: "greedy", // 두 손가락으로만 확대/축소, 한 손가락으로는 지도 이동
+          gestureHandling: "cooperative", // 한 손가락은 페이지/지도 스크롤, 두 손가락 핀치로만 확대/축소
           disableDoubleClickZoom: true, // 더블 클릭 확대 비활성화
         });
         gMapRef.current = gMap;
@@ -610,7 +610,7 @@ function MapView({
     <div
       ref={mapDivRef}
       className="w-full h-[calc(100svh-3rem)] md:h-[calc(100vh-3rem)] relative"
-      style={{ touchAction: "pan-x pan-y pinch-zoom" }}
+      style={{ touchAction: "none" }}
     />
   );
 }
