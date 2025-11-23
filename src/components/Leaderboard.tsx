@@ -15,13 +15,17 @@ const Leaderboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<"weekly" | "total">("weekly");
   const { address } = useAccount();
+  const isInitialMount = React.useRef(true);
 
   const currentUserAddress = address;
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        setLoading(true);
+        // 초기 로딩일 때만 loading 상태를 true로 설정 (탭 전환 시 깜빡임 방지)
+        if (isInitialMount.current) {
+          setLoading(true);
+        }
         const data = await getLeaderboard();
 
         // weekly일 때는 오늘 작성한 리뷰 개수도 가져오기
@@ -43,6 +47,7 @@ const Leaderboard: React.FC = () => {
         setUsers([]);
       } finally {
         setLoading(false);
+        isInitialMount.current = false;
       }
     };
 
@@ -90,6 +95,12 @@ const Leaderboard: React.FC = () => {
     return walletAddress.toLowerCase() === currentUserAddress.toLowerCase();
   };
 
+  // 현재 사용자 정보 찾기
+  // const currentUser = users.find((user) => isCurrentUser(user.wallet_address));
+  // const currentUserRank = currentUser
+  //   ? users.findIndex((user) => isCurrentUser(user.wallet_address)) + 1
+  //   : null;
+
   if (loading) {
     return (
       <div className="pt-28 bg-gray-100 min-h-screen flex items-center justify-center">
@@ -101,6 +112,72 @@ const Leaderboard: React.FC = () => {
   return (
     <div className="pt-28 bg-gray-100 min-h-screen">
       <div className="flex flex-col gap-4 p-6">
+        {/* 현재 사용자 순위 카드 */}
+        {/* {currentUser && currentUserRank && (
+          <div className="bg-white rounded-[12px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]">
+            <div className="flex gap-[8px] items-center p-[16px]">
+              <p className="text-[16px] font-semibold leading-[24px] text-gray-500 text-center shrink-0">
+                {currentUserRank.toLocaleString()}
+              </p>
+              <div className="flex gap-[8px] items-center min-w-0">
+                <div className="">
+                  {currentUser.user_pfp_url ? (
+                    <div className="w-[24px] h-[24px] rounded-full overflow-hidden">
+                      <img
+                        src={currentUser.user_pfp_url}
+                        alt={getUserDisplayName(currentUser)}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-[24px] h-[24px] rounded-full bg-red-500 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-white">
+                        {getUserDisplayName(currentUser)
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-[8px] items-start justify-center shrink-0 min-w-0">
+                  <p className="text-[16px] font-semibold leading-[24px] text-gray-900 tracking-[0.16px] truncate w-full">
+                    {getUserDisplayName(currentUser)}
+                  </p>
+                  <div className="flex gap-[8px] items-center">
+                    <p className="text-[16px] font-normal leading-[24px] text-gray-500 tracking-[0.16px]">
+                      {formatPoints(currentUser.points)} YuP
+                    </p>
+                    {period === "weekly" && (
+                      <div className="flex gap-[2px] items-center">
+                        {Array.from({ length: 5 }).map((_, i) => {
+                          const isChecked =
+                            (currentUser.todayReviewCount || 0) > i;
+                          return (
+                            <div
+                              key={i}
+                              className="relative shrink-0 size-[20px]"
+                            >
+                              <img
+                                src={
+                                  isChecked
+                                    ? "/icons/icon-checked.svg"
+                                    : "/icons/icon-unchecked.svg"
+                                }
+                                alt={isChecked ? "checked" : "unchecked"}
+                                className="block max-w-none size-full"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )} */}
+
         {/* Weekly/Total 토글 */}
         <div className="bg-gray-200 rounded-[18px] p-1 flex gap-2">
           <button
