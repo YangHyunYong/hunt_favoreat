@@ -387,6 +387,8 @@ function MapView({
           streetViewControl: false,
           gestureHandling: "greedy", // 모바일: 한 손가락으로 지도 이동, 두 손가락 핀치로만 확대/축소
           disableDoubleClickZoom: true, // 더블 클릭 확대 비활성화
+          minZoom: 10,
+          maxZoom: 20,
         });
         gMapRef.current = gMap;
 
