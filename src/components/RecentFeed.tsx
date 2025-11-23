@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { getReviewsWithImages, supabase } from "../supabaseClient";
 
@@ -27,6 +27,8 @@ const RecentFeed: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
   const [containerHeight, setContainerHeight] = useState<number>(0);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
   const ITEMS_PER_PAGE = 20;
 
   // 사용자 이름과 아바타 가져오기
@@ -92,7 +94,8 @@ const RecentFeed: React.FC = () => {
   // 리뷰를 카드로 변환하는 함수
   const convertReviewsToItems = async (
     reviews: any[],
-    startTop: { left: number; right: number }
+    startTop: { left: number; right: number },
+    containerWidthValue?: number
   ): Promise<{
     items: (FeedItem & { left: number; top: number })[];
     endTop: { left: number; right: number };
@@ -101,9 +104,15 @@ const RecentFeed: React.FC = () => {
     let leftColTop = startTop.left;
     let rightColTop = startTop.right;
     const itemGap = 16;
-    const leftColX = 28;
-    const rightColX = 204;
-    const fullWidth = 337;
+    const cardWidth = 160;
+
+    // 컨테이너 너비를 기준으로 x축 여백 자동 계산
+    const width = containerWidthValue || containerWidth || window.innerWidth;
+    const totalCardsWidth = cardWidth * 2 + itemGap; // 두 개의 카드 + gap
+    const sideMargin = Math.max(20, (width - totalCardsWidth) / 2); // 최소 20px 여백
+    const leftColX = sideMargin;
+    const rightColX = sideMargin + cardWidth + itemGap;
+    const fullWidth = width - sideMargin * 2;
 
     // 각 리뷰의 이미지 크기를 확인하고 카드 타입 결정
     for (const review of reviews) {
@@ -385,6 +394,21 @@ const RecentFeed: React.FC = () => {
     };
   };
 
+  // 컨테이너 너비 감지
+  useEffect(() => {
+    const updateContainerWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+      } else {
+        setContainerWidth(window.innerWidth);
+      }
+    };
+
+    updateContainerWidth();
+    window.addEventListener("resize", updateContainerWidth);
+    return () => window.removeEventListener("resize", updateContainerWidth);
+  }, []);
+
   // 최신 리뷰 가져오기 (초기 로드)
   useEffect(() => {
     const fetchRecentReviews = async () => {
@@ -405,10 +429,14 @@ const RecentFeed: React.FC = () => {
           setHasMore(false);
         }
 
-        const result = await convertReviewsToItems(reviews, {
-          left: 20,
-          right: 20,
-        });
+        const result = await convertReviewsToItems(
+          reviews,
+          {
+            left: 20,
+            right: 20,
+          },
+          containerWidth
+        );
 
         // 컨테이너 높이 계산
         const maxTop = Math.max(
@@ -477,6 +505,7 @@ const RecentFeed: React.FC = () => {
 
       // 현재 마지막 카드의 위치 계산 (itemGap 포함)
       const itemGap = 16;
+      const cardWidth = 160;
       const currentMaxTop = Math.max(
         ...feedItems.map(
           (item) => (item.top || 0) + (item.height || 0) + itemGap
@@ -484,8 +513,22 @@ const RecentFeed: React.FC = () => {
         20
       );
 
+      // 동적으로 계산된 leftColX와 rightColX 사용
+      const currentSideMargin = Math.max(
+        20,
+        (containerWidth || window.innerWidth - cardWidth * 2 - itemGap) / 2
+      );
+      const currentLeftColX = currentSideMargin;
+      const currentRightColX = currentSideMargin + cardWidth + itemGap;
+      const currentFullWidth =
+        (containerWidth || window.innerWidth) - currentSideMargin * 2;
+
       const leftColTop = feedItems
-        .filter((item) => item.left === 28)
+        .filter(
+          (item) =>
+            Math.abs((item.left || 0) - currentLeftColX) < 1 ||
+            item.width === currentFullWidth
+        )
         .reduce(
           (max, item) =>
             Math.max(max, (item.top || 0) + (item.height || 0) + itemGap),
@@ -493,7 +536,11 @@ const RecentFeed: React.FC = () => {
         );
 
       const rightColTop = feedItems
-        .filter((item) => item.left === 204)
+        .filter(
+          (item) =>
+            Math.abs((item.left || 0) - currentRightColX) < 1 ||
+            item.width === currentFullWidth
+        )
         .reduce(
           (max, item) =>
             Math.max(max, (item.top || 0) + (item.height || 0) + itemGap),
@@ -501,10 +548,14 @@ const RecentFeed: React.FC = () => {
         );
 
       // 비동기 처리
-      convertReviewsToItems(uniqueReviews, {
-        left: Math.max(leftColTop, currentMaxTop),
-        right: Math.max(rightColTop, currentMaxTop),
-      }).then((result) => {
+      convertReviewsToItems(
+        uniqueReviews,
+        {
+          left: Math.max(leftColTop, currentMaxTop),
+          right: Math.max(rightColTop, currentMaxTop),
+        },
+        containerWidth
+      ).then((result) => {
         const newItems = [...feedItems, ...result.items];
 
         // 컨테이너 높이 업데이트
@@ -769,6 +820,7 @@ const RecentFeed: React.FC = () => {
 
   return (
     <div
+      ref={containerRef}
       className="relative"
       style={{
         minHeight: containerHeight || "100vh",

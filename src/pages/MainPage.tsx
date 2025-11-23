@@ -276,6 +276,12 @@ function MapView({
   // 빠른 연속 클릭 대비 최신 요청만 반영하기 위한 토큰
   const latestReqId = useRef(0);
 
+  // userPfpUrl을 ref로 저장하여 최신 값 유지
+  const userPfpUrlRef = useRef(userPfpUrl);
+  useEffect(() => {
+    userPfpUrlRef.current = userPfpUrl;
+  }, [userPfpUrl]);
+
   // userPfpUrl 변경 시 마커 아이콘 업데이트 (비동기, 블로킹 없음)
   useEffect(() => {
     if (markerRef.current && userPfpUrl !== undefined && gMapRef.current) {
@@ -299,8 +305,8 @@ function MapView({
   }, [userPfpUrl]);
 
   useEffect(() => {
-    // userPfpUrl이 준비될 때까지 기다림 (undefined가 아닐 때까지)
-    if (userPfpUrl === undefined) {
+    // 이미 초기화되었으면 다시 초기화하지 않음
+    if (gMapRef.current) {
       return;
     }
 
@@ -366,25 +372,13 @@ function MapView({
           throw new Error("Google Maps API 로드 시간 초과");
         }
 
-        // 기본 위치 (서울 시청)
+        // 기본 위치 (서울 시청)로 먼저 지도 표시 (geolocation 대기하지 않음)
         let position = { lat: 37.37, lng: 126.9562 };
-
-        if ("geolocation" in navigator) {
-          try {
-            const pos = await new Promise<GeolocationPosition>(
-              (resolve, reject) =>
-                navigator.geolocation.getCurrentPosition(resolve, reject)
-            );
-            position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            console.log("현재 위치 가져오기 성공:", position);
-          } catch (e) {
-            console.warn("위치 정보를 가져오지 못했습니다:", e);
-          }
-        }
 
         console.log("Google Maps 라이브러리 로드 완료");
 
         // 기존 Google Maps API 사용 (비용 절약)
+        // 지도를 먼저 기본 위치로 빠르게 표시
         const gMap = new google.maps.Map(mapDivRef.current as HTMLElement, {
           center: position,
           zoom: 18,
@@ -394,6 +388,40 @@ function MapView({
           gestureHandling: "greedy",
         });
         gMapRef.current = gMap;
+
+        // geolocation은 비동기로 처리하여 지도 표시를 블로킹하지 않음
+        if ("geolocation" in navigator) {
+          // 타임아웃 설정 (3초)
+          const timeoutId = setTimeout(() => {
+            // console.warn("위치 정보 가져오기 타임아웃");
+          }, 5000);
+
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              clearTimeout(timeoutId);
+              const newPosition = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+              // 지도와 마커 위치 업데이트
+              if (gMapRef.current) {
+                gMapRef.current.setCenter(newPosition);
+                if (markerRef.current) {
+                  markerRef.current.setPosition(newPosition);
+                }
+              }
+              // console.log("현재 위치 가져오기 성공:", newPosition);
+            },
+            (_e) => {
+              clearTimeout(timeoutId);
+              // console.warn("위치 정보를 가져오지 못했습니다:", _e);
+            },
+            {
+              timeout: 3000, // 3초 타임아웃
+              maximumAge: 60000, // 1분 이내 캐시된 위치 사용
+            }
+          );
+        }
 
         // 마커 초기화: 먼저 기본 마커를 빠르게 표시하고, 커스텀 마커가 준비되면 교체
         const initializeMarker = () => {
@@ -405,21 +433,25 @@ function MapView({
           });
 
           // 2. 비동기로 커스텀 마커 아이콘 생성 후 교체 (지도 렌더링을 블로킹하지 않음)
-          createCustomMarkerIcon(userPfpUrl || null)
-            .then((iconUrl) => {
-              if (markerRef.current) {
-                const markerIcon = {
-                  url: iconUrl,
-                  scaledSize: new google.maps.Size(48, 48),
-                  size: new google.maps.Size(48, 48),
-                  anchor: new google.maps.Point(24, 48), // 아래쪽 뾰족한 부분이 위치를 가리키도록
-                };
-                markerRef.current.setIcon(markerIcon);
-              }
-            })
-            .catch((_error) => {
-              // 실패해도 기본 마커는 이미 표시되어 있음
-            });
+          // userPfpUrl이 준비되었을 때만 커스텀 마커 생성
+          const currentPfpUrl = userPfpUrlRef.current;
+          if (currentPfpUrl !== undefined) {
+            createCustomMarkerIcon(currentPfpUrl || null)
+              .then((iconUrl) => {
+                if (markerRef.current) {
+                  const markerIcon = {
+                    url: iconUrl,
+                    scaledSize: new google.maps.Size(48, 48),
+                    size: new google.maps.Size(48, 48),
+                    anchor: new google.maps.Point(24, 48), // 아래쪽 뾰족한 부분이 위치를 가리키도록
+                  };
+                  markerRef.current.setIcon(markerIcon);
+                }
+              })
+              .catch((_error) => {
+                // 실패해도 기본 마커는 이미 표시되어 있음
+              });
+          }
         };
 
         initializeMarker();
@@ -565,13 +597,13 @@ function MapView({
       }
     }
 
-    // userPfpUrl이 준비된 후에만 구글맵 초기화
+    // 구글맵 초기화 (userPfpUrl과 독립적으로 실행)
     const cleanup = initMapOnce();
     return () => {
       // initMapOnce 내에서 반환한 클린업이 Promise일 수 있으니 방어
       Promise.resolve(cleanup).catch(() => {});
     };
-  }, [userPfpUrl]);
+  }, []);
 
   return (
     <div
@@ -1295,90 +1327,94 @@ const MainScreen: React.FC = () => {
           </button>
         )} */}
 
-        {/* Bottom Sheet (0.075 / 0.46 / 1.0 단계) */}
-        <div ref={sheetHostRef}>
-          <BottomSheet
-            ref={sheetRef}
-            open={true}
-            blocking={false}
-            snapPoints={({ maxHeight }) => {
-              if (!selectedPlace) {
-                return [0.08 * maxHeight];
-              }
-              return [0.08 * maxHeight, 0.46 * maxHeight];
-            }}
-            defaultSnap={({ snapPoints }) => snapPoints[0]}
-            onDismiss={() => {}}
-          >
-            {!showContent ? (
-              // 0.46 미만: 프리뷰
-              <div className="p-3">
-                <p className="text-center text-sm text-gray-500">
-                  지도를 탭해 주변 가게를 선택하세요
-                </p>
-              </div>
-            ) : (
-              // 0.46 이상: 이미지 카드/별점/버튼
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-place-title leading-snug flex-1 min-w-0 line-clamp-2 mr-1">
-                    {heroTitle}
-                  </div>
-                  <div className="flex gap-2 flex-none shrink-0">
-                    <button
-                      onClick={handleShare}
-                      className="p-3 bg-gray-100 hover:bg-gray-200 rounded-[16px] transition-colors"
-                      title="공유하기"
-                    >
-                      <img src="/icons/share-07.svg" className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleBookmarkToggle}
-                      className={`p-3 rounded-[16px] transition-colors ${
-                        isBookmarked
-                          ? "bg-redorange-100 hover:bg-redorange-200"
-                          : "bg-gray-100 hover:bg-gray-200"
-                      }`}
-                      title={isBookmarked ? "북마크 해제" : "북마크 추가"}
-                    >
-                      <img
-                        src={
+        {/* Bottom Sheet (0.075 / 0.46 / 1.0 단계) - near-me 탭에서만 표시 */}
+        {activeTab === "near-me" && (
+          <div ref={sheetHostRef}>
+            <BottomSheet
+              ref={sheetRef}
+              open={true}
+              blocking={false}
+              snapPoints={({ maxHeight }) => {
+                if (!selectedPlace) {
+                  return [0.08 * maxHeight];
+                }
+                return [0.08 * maxHeight, 0.46 * maxHeight];
+              }}
+              defaultSnap={({ snapPoints }) => snapPoints[0]}
+              onDismiss={() => {}}
+            >
+              {!showContent ? (
+                // 0.46 미만: 프리뷰
+                <div className="p-3">
+                  <p className="text-center text-sm text-gray-500">
+                    지도를 탭해 주변 가게를 선택하세요
+                  </p>
+                </div>
+              ) : (
+                // 0.46 이상: 이미지 카드/별점/버튼
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-place-title leading-snug flex-1 min-w-0 line-clamp-2 mr-1">
+                      {heroTitle}
+                    </div>
+                    <div className="flex gap-2 flex-none shrink-0">
+                      <button
+                        onClick={handleShare}
+                        className="p-3 bg-gray-100 hover:bg-gray-200 rounded-[16px] transition-colors"
+                        title="공유하기"
+                      >
+                        <img src="/icons/share-07.svg" className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={handleBookmarkToggle}
+                        className={`p-3 rounded-[16px] transition-colors ${
                           isBookmarked
-                            ? "/icons/bookmark-added.svg"
-                            : "/icons/bookmark.svg"
-                        }
-                        className="w-4 h-4"
-                      />
+                            ? "bg-redorange-100 hover:bg-redorange-200"
+                            : "bg-gray-100 hover:bg-gray-200"
+                        }`}
+                        title={isBookmarked ? "북마크 해제" : "북마크 추가"}
+                      >
+                        <img
+                          src={
+                            isBookmarked
+                              ? "/icons/bookmark-added.svg"
+                              : "/icons/bookmark.svg"
+                          }
+                          className="w-4 h-4"
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 이미지 2개 */}
+                  <PhotosBlock img1={img1} img2={img2} />
+
+                  {/* 별점 + 리뷰수 + 버튼 */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Stars rating={rating} />
+                      <span className="text-rating-count">({ratingCount})</span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (!selectedPlace) return;
+                        const slug = toSlug(
+                          selectedPlace.displayName || "store"
+                        );
+                        navigate(`/store/${slug}`, { state: selectedPlace });
+                      }}
+                      className="px-4 py-2.5 bg-black text-white rounded-xl font-semibold flex items-center gap-2"
+                    >
+                      <span className="text-button-content">View Details</span>
+                      <span>→</span>
                     </button>
                   </div>
                 </div>
-
-                {/* 이미지 2개 */}
-                <PhotosBlock img1={img1} img2={img2} />
-
-                {/* 별점 + 리뷰수 + 버튼 */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Stars rating={rating} />
-                    <span className="text-rating-count">({ratingCount})</span>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      if (!selectedPlace) return;
-                      const slug = toSlug(selectedPlace.displayName || "store");
-                      navigate(`/store/${slug}`, { state: selectedPlace });
-                    }}
-                    className="px-4 py-2.5 bg-black text-white rounded-xl font-semibold flex items-center gap-2"
-                  >
-                    <span className="text-button-content">View Details</span>
-                    <span>→</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </BottomSheet>
-        </div>
+              )}
+            </BottomSheet>
+          </div>
+        )}
       </div>
 
       {/* Leaderboard 탭 */}
