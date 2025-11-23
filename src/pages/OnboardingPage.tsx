@@ -29,7 +29,7 @@ const OnboardingPage: React.FC = () => {
       return new Promise<void>((resolve, reject) => {
         // 이미 로드되어 있는지 확인
         if (typeof google === "object" && google.maps && google.maps.places) {
-          console.log("Google Maps API 이미 로드됨");
+          // console.log("Google Maps API 이미 로드됨");
           resolve();
           return;
         }
@@ -72,11 +72,11 @@ const OnboardingPage: React.FC = () => {
         script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=en&region=US`;
         script.async = true;
         script.onerror = () => {
-          console.error("Google Maps 스크립트 로드 실패");
+          // console.error("Google Maps 스크립트 로드 실패");
           reject(new Error("Google Maps 스크립트 로드 실패"));
         };
         script.onload = () => {
-          console.log("Google Maps API 로드 완료");
+          // console.log("Google Maps API 로드 완료");
           resolve();
         };
         document.head.appendChild(script);
@@ -84,7 +84,7 @@ const OnboardingPage: React.FC = () => {
     };
 
     loadGoogleMapsScript().catch((error) => {
-      console.error("Google Maps API 로드 실패:", error);
+      // console.error("Google Maps API 로드 실패:", error);
     });
   }, []);
 
@@ -114,7 +114,7 @@ const OnboardingPage: React.FC = () => {
 
   const handlePlaceSelect = (placeId: string) => {
     // TODO: Handle place selection
-    console.log("Place selected:", placeId);
+    // console.log("Place selected:", placeId);
   };
 
   return (

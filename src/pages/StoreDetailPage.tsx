@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import { sdk } from "@farcaster/frame-sdk";
 import Header from "../components/Header";
@@ -20,13 +19,13 @@ import {
   ensurePlaceExists,
   addPointsToUser,
   addLikeToReview,
+  getReviewCountLast24Hours,
+  getPlaceReviewStats,
 } from "../supabaseClient";
 
 interface PlaceDetailsResult {
   displayName: string;
   photos: string[];
-  rating?: number;
-  userRatingCount?: number;
   placeId?: string;
   distanceMeters?: number; // StoreListScreen에서 전달받은 거리
   address?: string; // 주소 정보
@@ -51,6 +50,11 @@ interface ReviewData {
         exif_longitude: number | null;
       }
   >;
+  users?: {
+    user_name: string | null;
+    user_pfp_url: string | null;
+    wallet_address: string;
+  } | null;
 }
 
 // 히어로 이미지: 없거나 로드 실패 시 placeholder 표시
@@ -84,18 +88,22 @@ const StoreDetailScreen: React.FC = () => {
   const { id } = useParams(); // /store/:displayName
   const location = useLocation();
   const place = (location.state || {}) as PlaceDetailsResult;
-  const { address: appKitAddress } = useAppKitAccount();
-  const { address: wagmiAddress } = useAccount();
-
-  // Farcaster 자동 로그인과 일반 로그인 모두 지원
-  const address = wagmiAddress || appKitAddress;
+  const { address } = useAccount();
   const { submitReview } = useFavoreatApi();
 
   // 기본 데이터 설정 (state 없을 경우 대비)
   const displayName = place.displayName || id || "Unknown Store";
   const heroImage = place.photos?.[0] || "/sample/burger-hero.jpg";
-  const rating = place.rating ?? 4;
-  const ratingCount = place.userRatingCount ?? 12;
+
+  // 리뷰 통계 상태
+  const [placeReviewStats, setPlaceReviewStats] = useState<{
+    count: number;
+    averageRating: number;
+  } | null>(null);
+
+  // DB에서 가져온 리뷰 통계만 사용
+  const rating = placeReviewStats?.averageRating || 0;
+  const ratingCount = placeReviewStats?.count || 0;
 
   // 거리 계산 상태
   const [distance, setDistance] = useState<number | null>(
@@ -130,6 +138,11 @@ const StoreDetailScreen: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [reviewToDelete, setReviewToDelete] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  // 리뷰 작성 제한 모달 상태
+  const [showReviewLimitModal, setShowReviewLimitModal] = useState(false);
+  // 로그인 필요 모달 상태
+  const [showLoginRequiredModal, setShowLoginRequiredModal] = useState(false);
 
   // 장소 UUID 상태 (한 번만 생성)
   const [placeUuid, setPlaceUuid] = useState<string | null>(null);
@@ -231,7 +244,7 @@ const StoreDetailScreen: React.FC = () => {
     }
   }, [placeUuid]);
 
-  // placeUuid가 준비되면 북마크 상태 확인
+  // placeUuid가 준비되면 북마크 상태 확인 및 리뷰 통계 조회
   useEffect(() => {
     const checkBookmarkStatus = async () => {
       if (!address || !placeUuid) return;
@@ -248,8 +261,24 @@ const StoreDetailScreen: React.FC = () => {
       }
     };
 
+    const fetchReviewStats = async () => {
+      if (!placeUuid) return;
+
+      try {
+        const stats = await getPlaceReviewStats(placeUuid);
+        setPlaceReviewStats(stats);
+      } catch (error) {
+        console.error("리뷰 통계 조회 실패:", error);
+        setPlaceReviewStats(null);
+      }
+    };
+
     if (placeUuid && address) {
       checkBookmarkStatus();
+    }
+
+    if (placeUuid) {
+      fetchReviewStats();
     }
   }, [placeUuid, address]);
 
@@ -258,7 +287,31 @@ const StoreDetailScreen: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const openComposer = () => setIsReviewOpen(true);
+  const openComposer = () => {
+    // 로그인하지 않은 경우 모달 표시
+    if (!address) {
+      setShowLoginRequiredModal(true);
+      return;
+    }
+    setIsReviewOpen(true);
+  };
+
+  // 리뷰 작성 상태 초기화 함수
+  const resetReviewState = () => {
+    setReviewText("");
+    setReviewImages([]);
+    setReviewFiles([]);
+    setMyRating(0);
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = "56px";
+    }
+  };
+
+  // 리뷰 작성 창 닫기 함수
+  const closeReviewComposer = () => {
+    setIsReviewOpen(false);
+    resetReviewState();
+  };
 
   // 거리 계산 함수 (Haversine formula)
   const calculateDistance = (
@@ -661,6 +714,16 @@ const StoreDetailScreen: React.FC = () => {
 
     setIsSubmittingReview(true);
     try {
+      // UTC 기준 24시간 내 리뷰 작성 개수 확인
+      const reviewCount = await getReviewCountLast24Hours(address);
+      console.log(`24시간 내 리뷰 작성 개수: ${reviewCount}/5`);
+
+      if (reviewCount >= 5) {
+        setReviewMessage("You have already written \n5 reviews today.");
+        setShowReviewLimitModal(true);
+        setIsSubmittingReview(false);
+        return; // DB에 저장하지 않고 종료
+      }
       // 1. 먼저 장소가 DB에 있는지 확인하고 없으면 생성
       let placeId: string;
 
@@ -742,15 +805,18 @@ const StoreDetailScreen: React.FC = () => {
       // 새 리뷰를 맨 앞에 추가
       setReviews((prev) => [newReview, ...prev]);
 
-      // 4. 초기화 및 닫기
-      setIsReviewOpen(false);
-      setReviewText("");
-      setReviewImages([]);
-      setReviewFiles([]);
-      if (textAreaRef.current) {
-        textAreaRef.current.style.height = "56px";
+      // 4. 리뷰 통계 갱신
+      if (placeUuid) {
+        try {
+          const stats = await getPlaceReviewStats(placeUuid);
+          setPlaceReviewStats(stats);
+        } catch (error) {
+          console.error("리뷰 통계 갱신 실패:", error);
+        }
       }
-      setMyRating(0);
+
+      // 5. 초기화 및 닫기
+      closeReviewComposer();
 
       // 5. 리뷰 작성 완료 모달 표시
       // 이미지 포함 여부에 따라 다른 메시지 설정
@@ -797,7 +863,7 @@ const StoreDetailScreen: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white pt-12">
+    <div className="min-h-screen bg-white pt-16">
       <Header
         leftElement={
           <button
@@ -811,10 +877,11 @@ const StoreDetailScreen: React.FC = () => {
           <ConnectWalletButton onOpenUserMenu={() => setIsUserMenuOpen(true)} />
         }
         centerElement={
-          <div className="flex items-center gap-0.5 text-redorange-500 text-rating-count">
-            <img src="/icons/logo.svg" alt="FavorEat" className="w-6 h-6" />
-            FavorEat
-          </div>
+          <img
+            src="/icons/icon-filled.svg"
+            alt="logo"
+            className="h-[30.75px] w-auto"
+          />
         }
       />
 
@@ -863,9 +930,31 @@ const StoreDetailScreen: React.FC = () => {
           <div className="flex items-center gap-2">
             {/* 가게의 고정 별점 표시 (읽기용) */}
             <div className="text-orange-500">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <span key={i}>{i < Math.round(rating) ? "★" : "☆"}</span>
-              ))}
+              {Array.from({ length: 5 }).map((_, i) => {
+                const starValue = i + 1;
+                // 별점이 해당 별의 값 이상이면 채워진 별
+                if (rating >= starValue) {
+                  return <span key={i}>★</span>;
+                }
+                // 별점이 해당 별의 값 - 0.5 이상이면 반 별
+                else if (rating >= starValue - 0.5) {
+                  return (
+                    <span key={i} className="relative inline-block">
+                      <span className="text-orange-500">☆</span>
+                      <span
+                        className="absolute left-0 top-0 overflow-hidden text-orange-500"
+                        style={{ width: "52.5%" }}
+                      >
+                        ★
+                      </span>
+                    </span>
+                  );
+                }
+                // 그 외는 빈 별
+                else {
+                  return <span key={i}>☆</span>;
+                }
+              })}
             </div>
             <span className="text-rating-count">({ratingCount})</span>
           </div>
@@ -905,7 +994,7 @@ const StoreDetailScreen: React.FC = () => {
             <button
               type="button"
               className="text-review-title text-gray-700 ml-4"
-              onClick={() => setIsReviewOpen(false)}
+              onClick={closeReviewComposer}
               aria-expanded={isReviewOpen}
               aria-controls="review-composer"
             >
@@ -985,9 +1074,39 @@ const StoreDetailScreen: React.FC = () => {
             <button
               onClick={onSubmitReview}
               disabled={!canSubmit || isSubmittingReview}
-              className={`px-4 py-2.5 rounded-[12px] text-button-content ${canSubmit && !isSubmittingReview ? "bg-gray-900 text-gray-50" : "bg-gray-300 text-gray-400"}`}
+              className={`px-4 py-2.5 rounded-[12px] text-button-content flex items-center justify-center gap-2 min-w-[100px] ${
+                isSubmittingReview
+                  ? "bg-orange-500 text-white"
+                  : canSubmit
+                    ? "bg-gray-900 text-gray-50"
+                    : "bg-gray-300 text-gray-400"
+              }`}
             >
-              Confirm
+              {isSubmittingReview ? (
+                <svg
+                  className="animate-spin h-5 w-5"
+                  style={{ color: "#ffffff" }}
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+              ) : (
+                "Confirm"
+              )}
             </button>
           </div>
         </div>
@@ -1006,17 +1125,41 @@ const StoreDetailScreen: React.FC = () => {
             <div key={review.id} className="px-5 py-5">
               <div className="flex items-center justify-between mb-4 relative">
                 <div className="flex items-center gap-1">
-                  {review.author_wallet.toLowerCase() ===
-                    address?.toLowerCase() && sdkContext?.user?.pfpUrl ? (
+                  {review.users?.user_pfp_url ? (
                     <>
-                      <img
-                        src={sdkContext.user.pfpUrl}
-                        alt="Profile"
-                        className="w-6 h-6 rounded-full"
-                      />
+                      <div className="w-6 h-6 rounded-full bg-[#e5e5e5] overflow-hidden">
+                        <img
+                          src={review.users.user_pfp_url}
+                          alt="Profile"
+                          className="w-6 h-6 rounded-full object-cover"
+                        />
+                      </div>
+                      <div
+                        className={`text-review-title ${
+                          review.author_wallet.toLowerCase() ===
+                          address?.toLowerCase()
+                            ? "text-blue-700"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        {review.users.user_name ||
+                          review.author_wallet.slice(0, 6) +
+                            "..." +
+                            review.author_wallet.slice(-4)}
+                      </div>
+                    </>
+                  ) : review.author_wallet.toLowerCase() ===
+                      address?.toLowerCase() && sdkContext?.user?.pfpUrl ? (
+                    <>
+                      <div className="w-6 h-6 rounded-full bg-[#e5e5e5] overflow-hidden">
+                        <img
+                          src={sdkContext.user.pfpUrl}
+                          alt="Profile"
+                          className="w-6 h-6 rounded-full object-cover"
+                        />
+                      </div>
                       <div className="text-review-title text-blue-700">
                         {sdkContext.user.displayName ||
-                          sdkContext.user.username ||
                           review.author_wallet.slice(0, 6) +
                             "..." +
                             review.author_wallet.slice(-4)}
@@ -1024,7 +1167,7 @@ const StoreDetailScreen: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <div className="w-6 h-6 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
+                      <div className="w-6 h-6 text-[14px] rounded-full bg-[#e5e5e5] flex items-center justify-center font-semibold text-orange-600">
                         {review.author_wallet.slice(2, 4).toUpperCase()}
                       </div>
                       <div
@@ -1098,32 +1241,32 @@ const StoreDetailScreen: React.FC = () => {
                             return;
                           }
 
-                          // Google Maps 링크 생성 (google_place_id 사용)
-                          // placeUuid를 사용하여 places 테이블에서 google_place_id 조회
-                          let googlePlaceId = null;
-                          if (placeUuid) {
-                            try {
-                              const { data: placeData } = await supabase
-                                .from("places")
-                                .select("google_place_id")
-                                .eq("id", placeUuid)
-                                .single();
-                              googlePlaceId = placeData?.google_place_id;
-                            } catch (error) {
-                              console.error(
-                                "google_place_id 조회 실패:",
-                                error
-                              );
-                            }
+                          // 리뷰의 모든 이미지 URL 추출 (최대 2개)
+                          const reviewImageUrls: string[] = [];
+                          if (review.photos && review.photos.length > 0) {
+                            review.photos.slice(0, 2).forEach((photo) => {
+                              const imageUrl =
+                                typeof photo === "string" ? photo : photo.url;
+                              if (imageUrl) {
+                                reviewImageUrls.push(imageUrl);
+                              }
+                            });
                           }
 
-                          const googleMapsUrl = googlePlaceId
-                            ? `https://www.google.com/maps/place/?q=place_id:${googlePlaceId}`
-                            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(displayName)}`;
-
+                          // 이미지가 있으면 모든 이미지 URL을 embeds에 사용, 없으면 embeds 없이 전송
                           const result = await sdk.actions.composeCast({
                             text: `🍽️ ${displayName}에서 맛있는 식사를 했어요! #FavorEat\n`,
-                            embeds: [googleMapsUrl],
+                            ...(reviewImageUrls.length > 0
+                              ? {
+                                  embeds:
+                                    reviewImageUrls.length === 1
+                                      ? [reviewImageUrls[0]]
+                                      : [
+                                          reviewImageUrls[0],
+                                          reviewImageUrls[1],
+                                        ],
+                                }
+                              : {}),
                           });
 
                           if (result?.cast) {
@@ -1154,11 +1297,31 @@ const StoreDetailScreen: React.FC = () => {
 
               {/* 별점 표시 */}
               <div className="text-orange-500 mb-2">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <span key={i}>
-                    {i < Math.floor(review.rating) ? "★" : "☆"}
-                  </span>
-                ))}
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const starValue = i + 1;
+                  // 별점이 해당 별의 값 이상이면 채워진 별
+                  if (review.rating >= starValue) {
+                    return <span key={i}>★</span>;
+                  }
+                  // 별점이 해당 별의 값 - 0.5 이상이면 반 별
+                  else if (review.rating >= starValue - 0.5) {
+                    return (
+                      <span key={i} className="relative inline-block">
+                        <span className="text-orgrange-500">☆</span>
+                        <span
+                          className="absolute left-0 top-0 overflow-hidden text-orange-500"
+                          style={{ width: "52.5%" }}
+                        >
+                          ★
+                        </span>
+                      </span>
+                    );
+                  }
+                  // 그 외는 빈 별
+                  else {
+                    return <span key={i}>☆</span>;
+                  }
+                })}
               </div>
 
               {/* 리뷰 이미지들 */}
@@ -1224,9 +1387,8 @@ const StoreDetailScreen: React.FC = () => {
                     const reviewTime = new Date(review.created_at);
                     const diffMs = now.getTime() - reviewTime.getTime();
 
-                    // 음수 시간 방지 (방금 등록한 경우 "방금" 표시)
                     if (diffMs < 0) {
-                      return "방금";
+                      return "now";
                     }
 
                     const diffMinutes = Math.floor(diffMs / (1000 * 60));
@@ -1246,7 +1408,7 @@ const StoreDetailScreen: React.FC = () => {
                     } else if (diffMinutes >= 1) {
                       return `${diffMinutes}m`;
                     } else {
-                      return "방금";
+                      return "now";
                     }
                   })()}
                 </span>
@@ -1361,6 +1523,16 @@ const StoreDetailScreen: React.FC = () => {
             // UI에서 즉시 제거
             setReviews((prev) => prev.filter((r) => r.id !== reviewToDelete));
 
+            // 리뷰 통계 갱신
+            if (placeUuid) {
+              try {
+                const stats = await getPlaceReviewStats(placeUuid);
+                setPlaceReviewStats(stats);
+              } catch (error) {
+                console.error("리뷰 통계 갱신 실패:", error);
+              }
+            }
+
             // 성공 상태로 변경
             setDeleteSuccess(true);
           } catch (error) {
@@ -1386,6 +1558,32 @@ const StoreDetailScreen: React.FC = () => {
         okText="okay"
         onClose={() => setShowReviewCompleteModal(false)}
         onConfirm={() => setShowReviewCompleteModal(false)}
+      />
+
+      {/* 리뷰 작성 제한 모달 */}
+      <ConfirmModal
+        open={showReviewLimitModal}
+        variant="success"
+        message={reviewMessage}
+        okText="okay"
+        onClose={() => {
+          setShowReviewLimitModal(false);
+          closeReviewComposer();
+        }}
+        onConfirm={() => {
+          setShowReviewLimitModal(false);
+          closeReviewComposer();
+        }}
+      />
+
+      {/* 로그인 필요 모달 */}
+      <ConfirmModal
+        open={showLoginRequiredModal}
+        variant="success"
+        message="Please Login to write a review."
+        okText="okay"
+        onClose={() => setShowLoginRequiredModal(false)}
+        onConfirm={() => setShowLoginRequiredModal(false)}
       />
     </div>
   );

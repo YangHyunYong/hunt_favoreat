@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import {
   addBookmark,
@@ -26,17 +25,42 @@ export interface StoreCardProps {
 }
 
 const Stars: React.FC<{ rating?: number }> = ({ rating = 0 }) => {
-  const full = Math.round(Math.min(5, Math.max(0, rating)));
+  const clampedRating = Math.min(5, Math.max(0, rating));
   return (
     <div className="flex items-center gap-1">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <span
-          key={i}
-          className={i < full ? "text-orange-500 w-4" : "text-gray-300 w-4"}
-        >
-          ★
-        </span>
-      ))}
+      {Array.from({ length: 5 }).map((_, i) => {
+        const starValue = i + 1;
+        // 별점이 해당 별의 값 이상이면 채워진 별
+        if (clampedRating >= starValue) {
+          return (
+            <span key={i} className="text-orange-500 w-4">
+              ★
+            </span>
+          );
+        }
+        // 별점이 해당 별의 값 - 0.5 이상이면 반 별
+        else if (clampedRating >= starValue - 0.5) {
+          return (
+            <span key={i} className="relative inline-block w-4">
+              <span className="text-orange-500">☆</span>
+              <span
+                className="absolute left-0 top-0 overflow-hidden text-orange-500"
+                style={{ width: "52.5%" }}
+              >
+                ★
+              </span>
+            </span>
+          );
+        }
+        // 그 외는 빈 별
+        else {
+          return (
+            <span key={i} className="text-gray-300 w-4">
+              ☆
+            </span>
+          );
+        }
+      })}
     </div>
   );
 };
@@ -62,11 +86,7 @@ const StoreCard: React.FC<StoreCardProps> = ({
   bookmarked,
   onViewDetails,
 }) => {
-  const { address: appKitAddress } = useAppKitAccount();
-  const { address: wagmiAddress } = useAccount();
-
-  // Farcaster 자동 로그인과 일반 로그인 모두 지원
-  const address = wagmiAddress || appKitAddress;
+  const { address } = useAccount();
   const [isBookmarked, setIsBookmarked] = useState<boolean>(
     bookmarked || false
   );

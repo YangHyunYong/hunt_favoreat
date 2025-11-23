@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { fetchPlaceDetails } from "./MainPage";
 import ConnectWalletButton from "../components/ConnectWalletButton";
 import UserMenu from "../components/UserMenu";
+import { getPlaceReviewStats } from "../supabaseClient";
 
 // 이미지 캐시 시스템
 const imageCache = new Map<string, string[]>();
@@ -60,7 +61,7 @@ async function fetchPlaceDetailsWithRetry(
         error.message?.includes("too many requests") ||
         error.message?.includes("quota")
       ) {
-        console.warn(`API 호출 제한 감지, ${i + 1}/${maxRetries} 재시도`);
+        // console.warn(`API 호출 제한 감지, ${i + 1}/${maxRetries} 재시도`);
         if (i < maxRetries - 1) {
           await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1))); // 지수 백오프
         }
@@ -156,7 +157,7 @@ const StoreListScreen: React.FC = () => {
           });
         },
         (error) => {
-          console.warn("위치 정보를 가져올 수 없습니다:", error);
+          // console.warn("위치 정보를 가져올 수 없습니다:", error);
           // 기본값: 서울시청
           resolve({ lat: 37.37, lng: 126.9562 });
         }
@@ -177,12 +178,12 @@ const StoreListScreen: React.FC = () => {
         if (!userLoc) {
           try {
             userLoc = await getCurrentLocation();
-            console.log(
-              "StoreListScreen에서 현재 위치 가져오기 성공:",
-              userLoc
-            );
+            // console.log(
+            //               "StoreListScreen에서 현재 위치 가져오기 성공:",
+            //               userLoc
+            //             );
           } catch (error) {
-            console.error("위치 정보 가져오기 실패:", error);
+            // console.error("위치 정보 가져오기 실패:", error);
             userLoc = { lat: 37.37, lng: 126.9562 };
           }
         }
@@ -226,9 +227,9 @@ const StoreListScreen: React.FC = () => {
                   )
                     resolve([]);
                   else {
-                    console.warn(
-                      `검색 실패 (${searchRequest.type || "keyword"}): ${status}`
-                    );
+                    // console.warn(
+                    //                       `검색 실패 (${searchRequest.type || "keyword"}): ${status}`
+                    //                     );
                     resolve([]);
                   }
                 });
@@ -236,10 +237,10 @@ const StoreListScreen: React.FC = () => {
             );
             return results;
           } catch (error) {
-            console.warn(
-              `검색 에러 (${searchRequest.type || "keyword"}):`,
-              error
-            );
+            // console.warn(
+            //               `검색 에러 (${searchRequest.type || "keyword"}):`,
+            //               error
+            //             );
             return [];
           }
         });
@@ -344,7 +345,7 @@ const StoreListScreen: React.FC = () => {
                   photos = placeDetails.photos.slice(0, 2);
                   setCachedImages(p.place_id, photos); // 캐시에 저장
                 } catch (error) {
-                  console.warn(`${p.name}: fetchPlaceDetails 실패:`, error);
+                  // console.warn(`${p.name}: fetchPlaceDetails 실패:`, error);
                   // 실패 시 nearbySearch 결과 사용
                   photos =
                     p.photos
@@ -378,11 +379,25 @@ const StoreListScreen: React.FC = () => {
                 })
               : undefined;
 
+            // DB에서 리뷰 통계 가져오기
+            let dbRating = 0;
+            let dbRatingCount = 0;
+
+            if (p.place_id) {
+              try {
+                const stats = await getPlaceReviewStats(p.place_id);
+                dbRating = stats.averageRating;
+                dbRatingCount = stats.count;
+              } catch (error) {
+                // console.warn(`${p.name}: 리뷰 통계 조회 실패:`, error);
+              }
+            }
+
             return {
               title: p.name || "Unknown",
               photos, // ← 전체 보관
-              rating: p.rating ?? 0,
-              ratingCount: p.user_ratings_total ?? 0,
+              rating: dbRating,
+              ratingCount: dbRatingCount,
               distanceMeters: dist ? Math.round(dist) : undefined,
               storeName: p.types && p.types[0] ? p.types[0] : undefined,
               addressPreview: p.vicinity || p.formatted_address || "",
@@ -398,8 +413,6 @@ const StoreListScreen: React.FC = () => {
                 const selectedPlace = {
                   displayName: p.name || "Unknown",
                   photos: photos, // 현재 장소의 photos 배열 사용
-                  rating: p.rating ?? undefined,
-                  userRatingCount: p.user_ratings_total ?? undefined,
                   placeId: p.place_id,
                   address: p.formatted_address || p.vicinity || "",
                   latitude: p.geometry?.location?.lat() || undefined,
@@ -421,7 +434,7 @@ const StoreListScreen: React.FC = () => {
           setItems(mapped);
         }
       } catch (e) {
-        console.error(e);
+        // console.error(e);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -433,7 +446,7 @@ const StoreListScreen: React.FC = () => {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-12">
+    <div className="min-h-screen bg-gray-100 pt-16">
       {/* 상단 헤더 */}
       <Header
         leftElement={<div></div>}
@@ -441,20 +454,18 @@ const StoreListScreen: React.FC = () => {
           <ConnectWalletButton onOpenUserMenu={() => setIsUserMenuOpen(true)} />
         }
         centerElement={
-          <div className="flex items-center gap-0.5 text-redorange-500 text-rating-count">
-            <img src="/icons/logo.svg" alt="FavorEat" className="w-6 h-6" />
-            FavorEat
-          </div>
+          <img
+            src="/icons/icon-filled.svg"
+            alt="logo"
+            className="h-[30.75px] w-auto"
+          />
         }
       />
 
       {/* 상단 도시/동네 + 우측 버튼 */}
-      <div className="px-4 pt-4 pb-2">
+      <div className="fixed top-16 left-0 right-0 z-10 bg-gray-100 px-4 pt-4 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex flex-col">
-            <div className="text-location-content-700 text-gray-800">
-              {cityName}
-            </div>
             <div className="text-location-content-700 text-gray-800">
               {townName}
             </div>
@@ -523,7 +534,7 @@ const StoreListScreen: React.FC = () => {
       </div>
 
       {/* 카드 리스트 */}
-      <div className="px-4 pb-28 space-y-6">
+      <div className="px-4 pt-20 pb-28 space-y-6">
         {loading && !items.length ? (
           <div className="rounded-[24px] bg-white border border-gray-200 p-6 animate-pulse">
             <div className="text-center">

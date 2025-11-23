@@ -14,7 +14,7 @@ import {
 
 export function useFavoreatApi() {
   const ensureUser = useCallback(async (walletAddress: WalletAddress) => {
-    return ensureUserWithWallet(walletAddress)
+    return ensureUserWithWallet(walletAddress, null, null, null)
   }, [])
 
   const submitReview = useCallback(

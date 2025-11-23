@@ -6,14 +6,17 @@ import Header from "../components/Header";
 import ConnectWalletButton from "../components/ConnectWalletButton";
 import UserMenu from "../components/UserMenu";
 import Navigator, { TabType } from "../components/Navigator";
-import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import {
   addBookmark,
   removeBookmark,
   getMyBookmarks,
   ensurePlaceExists,
+  getPlaceReviewStats,
+  supabase,
 } from "../supabaseClient";
+import RecentFeed from "../components/RecentFeed";
+import Leaderboard from "../components/Leaderboard";
 
 // Google Places API placeId를 UUID로 변환하는 함수
 async function placeIdToUUID(placeId: string): Promise<string> {
@@ -54,13 +57,12 @@ interface MapViewProps {
   onLocationResolved: (city: string, town: string) => void;
   onPlaceSelected?: (details: PlaceDetailsResult) => void;
   onMapLocationChanged?: (location: { lat: number; lng: number }) => void;
+  userPfpUrl?: string | null;
 }
 
 interface PlaceDetailsResult {
   displayName: string;
   photos: string[];
-  rating?: number;
-  userRatingCount?: number;
   placeId?: string;
   address?: string; // 주소 정보
   latitude?: number; // 위도
@@ -90,6 +92,105 @@ function toSlug(name: string) {
     .replace(/^-+|-+$/g, ""); // 앞뒤 하이픈 제거
 }
 
+// 핀 아이콘 안에 pfp 이미지를 그리는 함수
+async function createCustomMarkerIcon(pfpUrl: string | null): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement("canvas");
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const baseSize = 48; // 마커 전체 크기 (표시 크기)
+    // 더 높은 해상도를 위해 3배 또는 4배로 증가
+    const scale = Math.max(devicePixelRatio, 3);
+    const size = baseSize * scale; // 고해상도를 위한 실제 크기
+
+    canvas.width = size;
+    canvas.height = size;
+    canvas.style.width = `${baseSize}px`;
+    canvas.style.height = `${baseSize}px`;
+
+    const ctx = canvas.getContext("2d", {
+      willReadFrequently: false,
+      alpha: true,
+    });
+
+    if (!ctx) {
+      reject(new Error("Canvas context not available"));
+      return;
+    }
+
+    // 이미지 스무딩 비활성화 (선명도 향상)
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    // 고해상도를 위한 스케일 조정
+    ctx.scale(scale, scale);
+
+    // 핀 모양 그리기 (말풍선 형태)
+    const centerX = baseSize / 2;
+    const centerY = baseSize / 2;
+    const radius = 19; // 원형 부분 반지름
+    const tipHeight = 5; // 아래쪽 뾰족한 부분 높이
+    const tipWidth = 9; // 아래쪽 뾰족한 부분 너비
+
+    // 핀 배경 그리기
+    ctx.beginPath();
+    // 위쪽 원형 부분
+    ctx.arc(centerX, centerY - tipHeight / 2, radius, 0, Math.PI * 2);
+    // 아래쪽 뾰족한 부분 (삼각형)
+    ctx.moveTo(centerX - tipWidth / 3, centerY + radius - tipHeight / 3);
+    ctx.lineTo(centerX, centerY + radius + tipHeight / 2);
+    ctx.lineTo(centerX + tipWidth / 3, centerY + radius - tipHeight / 3);
+    ctx.closePath();
+
+    ctx.strokeStyle = "#FF4500";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    if (pfpUrl) {
+      // pfp 이미지 로드 및 그리기
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        // 원형 클리핑 영역 설정
+        ctx.save();
+        ctx.beginPath();
+        const imageRadius = radius - 1; // 테두리를 위한 여백
+        ctx.arc(centerX, centerY - tipHeight / 2, imageRadius, 0, Math.PI * 2);
+        ctx.clip();
+
+        // 이미지 그리기 (고해상도 유지, 원본 크기 사용)
+        const imageSize = imageRadius * 2;
+        // 이미지의 원본 크기를 유지하면서 그리기
+        const sourceSize = Math.min(img.width, img.height);
+        const sourceX = (img.width - sourceSize) / 2;
+        const sourceY = (img.height - sourceSize) / 2;
+
+        ctx.drawImage(
+          img,
+          sourceX,
+          sourceY,
+          sourceSize,
+          sourceSize,
+          centerX - imageRadius,
+          centerY - tipHeight / 2 - imageRadius,
+          imageSize,
+          imageSize
+        );
+
+        ctx.restore();
+        resolve(canvas.toDataURL("image/png", 1.0)); // 최고 품질로 저장
+      };
+      img.onerror = () => {
+        // 이미지 로드 실패 시 기본 핀만 반환
+        resolve(canvas.toDataURL("image/png", 1.0));
+      };
+      img.src = pfpUrl;
+    } else {
+      // pfpUrl이 없으면 기본 핀만 반환
+      resolve(canvas.toDataURL("image/png", 1.0));
+    }
+  });
+}
+
 // Fetch Google Place details by placeId and return typed data (기존 Places API 사용).
 export async function fetchPlaceDetails(
   placeId: string
@@ -107,14 +208,7 @@ export async function fetchPlaceDetails(
     service.getDetails(
       {
         placeId: placeId,
-        fields: [
-          "name",
-          "photos",
-          "rating",
-          "user_ratings_total",
-          "geometry",
-          "formatted_address",
-        ],
+        fields: ["name", "photos", "geometry", "formatted_address"],
       },
       (place, status) => {
         if (status === google.maps.places.PlacesServiceStatus.OK && place) {
@@ -126,8 +220,6 @@ export async function fetchPlaceDetails(
           resolve({
             displayName: place.name || "",
             photos,
-            rating: place.rating || undefined,
-            userRatingCount: place.user_ratings_total || undefined,
             placeId: placeId,
             address: place.formatted_address || undefined,
             latitude: place.geometry?.location?.lat() || undefined,
@@ -145,6 +237,7 @@ function MapView({
   onLocationResolved,
   onPlaceSelected,
   onMapLocationChanged,
+  userPfpUrl,
 }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
 
@@ -168,6 +261,24 @@ function MapView({
 
   // 빠른 연속 클릭 대비 최신 요청만 반영하기 위한 토큰
   const latestReqId = useRef(0);
+
+  // userPfpUrl 변경 시 마커 아이콘 업데이트
+  useEffect(() => {
+    const updateMarkerIcon = async () => {
+      if (markerRef.current && userPfpUrl !== undefined && gMapRef.current) {
+        const iconUrl = await createCustomMarkerIcon(userPfpUrl || null);
+        const markerIcon = {
+          url: iconUrl,
+          scaledSize: new google.maps.Size(48, 48),
+          size: new google.maps.Size(48, 48),
+          anchor: new google.maps.Point(24, 48), // 아래쪽 뾰족한 부분이 위치를 가리키도록
+        };
+        markerRef.current.setIcon(markerIcon);
+      }
+    };
+
+    updateMarkerIcon();
+  }, [userPfpUrl]);
 
   useEffect(() => {
     const loadGoogleMapsScript = () => {
@@ -261,30 +372,26 @@ function MapView({
         });
         gMapRef.current = gMap;
 
-        // 핀 형태 마커 생성
-        const pinIcon = {
-          path: "M12,2C8.13,2 5,5.13 5,9c0,5.25 7,13 7,13s7,-7.75 7,-13C19,5.13 15.87,2 12,2z M12,11.5A2.5,2.5 0 0,1 9.5,9A2.5,2.5 0 0,1 12,6.5A2.5,2.5 0 0,1 14.5,9A2.5,2.5 0 0,1 12,11.5z",
-          fillColor: "#F97316",
-          fillOpacity: 1,
-          strokeColor: "#FFFFFF",
-          strokeWeight: 2,
-          scale: 1.5,
-          anchor: new google.maps.Point(12, 22),
+        // 마커 아이콘 생성 (비동기)
+        const initializeMarker = async () => {
+          const iconUrl = await createCustomMarkerIcon(userPfpUrl || null);
+          const markerIcon = {
+            url: iconUrl,
+            scaledSize: new google.maps.Size(48, 48),
+            size: new google.maps.Size(48, 48),
+            anchor: new google.maps.Point(24, 48), // 아래쪽 뾰족한 부분이 위치를 가리키도록
+          };
+
+          // 기존 마커 사용 (비용 절약) - 커스텀 핀 아이콘 적용
+          markerRef.current = new google.maps.Marker({
+            map: gMap,
+            position,
+            title: "현재 위치",
+            icon: markerIcon,
+          });
         };
 
-        // 기존 마커 사용 (비용 절약) - 핀 형태 아이콘 적용
-        markerRef.current = new google.maps.Marker({
-          map: gMap,
-          position,
-          title: "현재 위치",
-          icon: pinIcon,
-          label: {
-            text: " ",
-            color: "#FFFFFF",
-            fontSize: "14px",
-            fontWeight: "bold",
-          },
-        });
+        initializeMarker();
 
         // 지도 클릭: 마커만 이동(지도 중심은 그대로 유지), 상세 조회 + 이미지 프리로드 후 부모 콜백
         gMap.addListener("click", async (e: any) => {
@@ -446,17 +553,18 @@ function MapView({
 const MainScreen: React.FC = () => {
   const location = useLocation();
   const [cityName, setCityName] = useState("");
-  const { address: appKitAddress } = useAppKitAccount();
-  const { address: wagmiAddress } = useAccount();
-
-  // Farcaster 자동 로그인과 일반 로그인 모두 지원
-  const address = wagmiAddress || appKitAddress;
+  const { address } = useAccount();
+  const [userPfpUrl, setUserPfpUrl] = useState<string | null>(null);
 
   const [townName, setTownName] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<PlaceDetailsResult | null>(
     null
   );
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [placeReviewStats, setPlaceReviewStats] = useState<{
+    count: number;
+    averageRating: number;
+  } | null>(null);
 
   // 🔹 Map/Grid 활성 상태 관리
   const [viewMode, setViewMode] = useState<"map" | "grid">("map");
@@ -467,6 +575,24 @@ const MainScreen: React.FC = () => {
   );
 
   const navigate = useNavigate();
+
+  // 탭 전환 시 bottom sheet 초기화
+  useEffect(() => {
+    // selectedPlace 초기화
+    setSelectedPlace(null);
+    // showContent 초기화
+    setShowContent(false);
+    // placeReviewStats 초기화
+    setPlaceReviewStats(null);
+    // bottom sheet를 최소 높이로 스냅
+    if (sheetRef.current?.snapTo) {
+      try {
+        sheetRef.current.snapTo(0); // 첫 번째 snap point (최소 높이)
+      } catch (error) {
+        console.warn("Bottom sheet 초기화 실패:", error);
+      }
+    }
+  }, [activeTab]);
 
   // Bottom sheet 제어
   const sheetHostRef = useRef<HTMLDivElement | null>(null);
@@ -532,6 +658,34 @@ const MainScreen: React.FC = () => {
     fetchCurrentLocation();
   }, []);
 
+  // users 테이블에서 user_pfp_url 가져오기
+  useEffect(() => {
+    const fetchUserPfpUrl = async () => {
+      if (address) {
+        try {
+          const { data, error } = await supabase
+            .from("users")
+            .select("user_pfp_url")
+            .eq("wallet_address", address.toLowerCase())
+            .single();
+
+          if (!error && data?.user_pfp_url) {
+            setUserPfpUrl(data.user_pfp_url);
+          } else {
+            setUserPfpUrl(null);
+          }
+        } catch (error) {
+          console.error("user_pfp_url 조회 실패:", error);
+          setUserPfpUrl(null);
+        }
+      } else {
+        setUserPfpUrl(null);
+      }
+    };
+
+    fetchUserPfpUrl();
+  }, [address]);
+
   // 시트 높이 관찰(자동 라우팅만 유지)
   useEffect(() => {
     if (!sheetHostRef.current) return;
@@ -588,20 +742,27 @@ const MainScreen: React.FC = () => {
     requestAnimationFrame(() => setTimeout(snapMiddle, 0));
   }, [selectedPlace]);
 
-  // 선택된 장소의 북마크 상태 확인
+  // 선택된 장소의 북마크 상태 확인 및 리뷰 통계 조회
   useEffect(() => {
-    if (!selectedPlace || !address) {
+    if (!selectedPlace) {
       setIsBookmarked(false);
+      setPlaceReviewStats(null);
       return;
     }
 
     if (!selectedPlace.placeId) {
       setIsBookmarked(false);
+      setPlaceReviewStats(null);
       return;
     }
 
     // 서버에서 해당 장소의 북마크 상태를 조회
     const checkBookmarkStatus = async () => {
+      if (!address) {
+        setIsBookmarked(false);
+        return;
+      }
+
       try {
         const placeId = selectedPlace.placeId!;
         const uuidPlaceId = await placeIdToUUID(placeId);
@@ -619,22 +780,60 @@ const MainScreen: React.FC = () => {
       }
     };
 
+    // 리뷰 통계 조회
+    const fetchReviewStats = async () => {
+      try {
+        const placeId = selectedPlace.placeId!;
+        const stats = await getPlaceReviewStats(placeId);
+        setPlaceReviewStats(stats);
+      } catch (error) {
+        console.error("리뷰 통계 조회 실패:", error);
+        setPlaceReviewStats(null);
+      }
+    };
+
     checkBookmarkStatus();
+    fetchReviewStats();
   }, [selectedPlace, address]);
 
-  // 별점 UI (가득/빈 별 표현)
+  // 별점 UI (가득/빈 별 표현, 0.5점 단위 지원)
   const Stars = ({ rating = 0 }: { rating?: number }) => {
-    const full = Math.round(Math.min(5, Math.max(0, rating)));
+    const clampedRating = Math.min(5, Math.max(0, rating));
     return (
       <div className="flex items-center gap-1">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <span
-            key={i}
-            className={i < full ? "text-orange-500 w-4" : "text-gray-300 w-4"}
-          >
-            ★
-          </span>
-        ))}
+        {Array.from({ length: 5 }).map((_, i) => {
+          const starValue = i + 1;
+          // 별점이 해당 별의 값 이상이면 채워진 별
+          if (clampedRating >= starValue) {
+            return (
+              <span key={i} className="text-orange-500 w-4">
+                ★
+              </span>
+            );
+          }
+          // 별점이 해당 별의 값 - 0.5 이상이면 반 별
+          else if (clampedRating >= starValue - 0.5) {
+            return (
+              <span key={i} className="relative inline-block w-4">
+                <span className="text-orange-500">☆</span>
+                <span
+                  className="absolute left-0 top-0 overflow-hidden text-orange-500"
+                  style={{ width: "52.5%" }}
+                >
+                  ★
+                </span>
+              </span>
+            );
+          }
+          // 그 외는 빈 별
+          else {
+            return (
+              <span key={i} className="text-gray-300 w-4">
+                ☆
+              </span>
+            );
+          }
+        })}
       </div>
     );
   };
@@ -693,8 +892,9 @@ const MainScreen: React.FC = () => {
     selectedPlace?.displayName || "Burger Boy and Burger girl are dancing now";
   const img1 = selectedPlace?.photos?.[0] || "/sample/burger.jpg";
   const img2 = selectedPlace?.photos?.[1] || "/sample/bibimbap.jpg";
-  const rating = selectedPlace?.rating ?? 4;
-  const ratingCount = selectedPlace?.userRatingCount ?? 12;
+  // DB에서 가져온 리뷰 통계만 사용
+  const rating = placeReviewStats?.averageRating || 0;
+  const ratingCount = placeReviewStats?.count || 0;
 
   // 공유 기능
   const handleShare = async () => {
@@ -871,19 +1071,14 @@ const MainScreen: React.FC = () => {
 
       {/* Recent 탭 */}
       {activeTab === "recent" && (
-        // <div className="pt-24 bg-gray-100 min-h-screen">
-        //   <RecentFeedContent />
-        // </div>
-        <div className="pt-24 bg-gray-100 min-h-screen flex items-center justify-center">
-          <p className="text-[18px] font-semibold text-gray-700">
-            준비중 입니다.
-          </p>
+        <div className="pt-[112px] bg-gray-100 min-h-screen">
+          <RecentFeed />
         </div>
       )}
 
       {/* Near me 탭 (지도) */}
       {activeTab === "near-me" && (
-        <div className="h-screen overflow-visible bg-white flex flex-col font-sans relative pt-24">
+        <div className="h-screen overflow-visible bg-white flex flex-col font-sans relative pt-28">
           {/* 지도 영역 */}
           <MapView
             onLocationResolved={(city, town) => {
@@ -898,10 +1093,11 @@ const MainScreen: React.FC = () => {
               setCurrentLocation(location);
               console.log("지도 위치 변경됨:", location);
             }}
+            userPfpUrl={userPfpUrl}
           />
 
           {/* 상단 */}
-          <div className="absolute top-12 left-0 w-full z-10 p-4 pointer-events-none">
+          <div className="absolute top-16 left-0 w-full z-10 p-4 pointer-events-none">
             {/* 1줄: City / Town 라벨 (항상 표시) */}
             <div className="pointer-events-auto">
               <div className="text-title-600 text-gray-800 inline-block px-2 py-1 rounded-lg">
@@ -1158,13 +1354,7 @@ const MainScreen: React.FC = () => {
       )}
 
       {/* Leaderboard 탭 */}
-      {activeTab === "leaderboard" && (
-        <div className="pt-24 bg-gray-100 min-h-screen flex items-center justify-center">
-          <p className="text-[18px] font-semibold text-gray-700">
-            준비중 입니다.
-          </p>
-        </div>
-      )}
+      {activeTab === "leaderboard" && <Leaderboard />}
 
       {/* UserMenu */}
       <UserMenu

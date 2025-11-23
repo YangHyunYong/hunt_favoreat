@@ -1,8 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount, useConnect } from "wagmi";
-import { modal } from "../wagmi";
-import { ensureUserWithWallet } from "../supabaseClient";
+import { ensureUserWithWallet, supabase } from "../supabaseClient";
 import { sdk } from "@farcaster/miniapp-sdk";
 
 interface ConnectWalletButtonProps {
@@ -13,14 +11,12 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
   onOpenUserMenu,
 }) => {
   const { isConnected, address } = useAccount();
-  const { isConnected: isReownConnected, address: reownAddress } =
-    useAppKitAccount();
   const { connect, connectors } = useConnect();
   const [sdkContext, setSdkContext] = useState<any>(null);
+  const [userPfpUrl, setUserPfpUrl] = useState<string | null>(null);
 
-  // 자동 로그인 시에는 useAccount, 그 외에는 useAppKitAccount 사용
-  const isWalletConnected = isConnected || isReownConnected;
-  const walletAddress = isConnected ? address : reownAddress;
+  const isWalletConnected = isConnected;
+  const walletAddress = address;
 
   // ** 자동 로그인 시도 및 사용자 등록 **
   useEffect(() => {
@@ -35,7 +31,7 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
       }
 
       // Farcaster 환경에서만 자동 연결 시도
-      if (!isConnected && !isReownConnected) {
+      if (!isConnected) {
         try {
           const context = await sdk.context;
           if (context?.user?.fid) {
@@ -69,8 +65,35 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
     const registerUser = async () => {
       if (isWalletConnected && walletAddress) {
         try {
-          await ensureUserWithWallet(walletAddress);
-          console.log("✅ User:", walletAddress);
+          // Farcaster SDK에서 사용자 정보 가져오기
+          let userFid: number | null = null;
+          let userName: string | null = null;
+          let userPfpUrl: string | null = null;
+
+          try {
+            const context = await sdk.context;
+            if (context?.user) {
+              userFid = context.user.fid || null;
+              userName =
+                context.user.displayName || context.user.username || null;
+              userPfpUrl = context.user.pfpUrl || null;
+            }
+          } catch (error) {
+            console.log("Farcaster SDK context not available:", error);
+          }
+
+          await ensureUserWithWallet(
+            walletAddress,
+            userFid,
+            userName,
+            userPfpUrl
+          );
+          console.log("✅ User registered:", {
+            walletAddress,
+            userFid,
+            userName,
+            userPfpUrl,
+          });
         } catch (error) {
           console.error("❌ User registration failed:", error);
         }
@@ -84,14 +107,58 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
   useEffect(() => {
     if (!isWalletConnected) {
       setSdkContext(null);
+      setUserPfpUrl(null);
     }
   }, [isWalletConnected]);
 
+  // users 테이블에서 user_pfp_url 가져오기
+  useEffect(() => {
+    const fetchUserPfpUrl = async () => {
+      if (walletAddress) {
+        try {
+          const { data, error } = await supabase
+            .from("users")
+            .select("user_pfp_url")
+            .eq("wallet_address", walletAddress.toLowerCase())
+            .single();
+
+          if (!error && data?.user_pfp_url) {
+            setUserPfpUrl(data.user_pfp_url);
+          } else {
+            setUserPfpUrl(null);
+          }
+        } catch (error) {
+          console.error("user_pfp_url 조회 실패:", error);
+          setUserPfpUrl(null);
+        }
+      }
+    };
+
+    fetchUserPfpUrl();
+  }, [walletAddress]);
+
+  // Connect 버튼 클릭 핸들러
+  const handleConnect = async () => {
+    try {
+      try {
+        const context = await sdk.context;
+        if (context?.user?.fid && connectors[0]) {
+          connect({ connector: connectors[0] });
+        }
+      } catch (error) {
+        console.log("Farcaster context not available:", error);
+      }
+    } catch (error) {
+      console.error("Connect failed:", error);
+    }
+  };
+
+  // 지갑이 연결되지 않았을 때 Connect 버튼 표시
   if (!isWalletConnected) {
     return (
       <button
         type="button"
-        onClick={() => modal.open()}
+        onClick={handleConnect}
         className="mr-3 text-[14px] font-semibold text-orange-600"
         aria-label="Connect Wallet"
       >
@@ -100,19 +167,26 @@ const ConnectWalletButton: React.FC<ConnectWalletButtonProps> = ({
     );
   }
 
+  // 지갑이 연결되었을 때 프로필 버튼 표시
   return (
     <button
       type="button"
       onClick={onOpenUserMenu}
-      className="w-10 h-10 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600"
+      className="w-10 h-10 text-[14px] rounded-full bg-[#e5e5e5] flex items-center justify-center font-semibold text-orange-600"
       aria-label="User Menu"
       title={walletAddress}
     >
-      {sdkContext?.user?.pfpUrl && isConnected && !isReownConnected ? (
+      {userPfpUrl ? (
+        <img
+          src={userPfpUrl}
+          alt="Profile"
+          className="w-10 h-10 rounded-full object-cover"
+        />
+      ) : sdkContext?.user?.pfpUrl && isConnected ? (
         <img
           src={sdkContext.user.pfpUrl}
           alt="Profile"
-          className="w-10 h-10 rounded-full"
+          className="w-10 h-10 rounded-full object-cover"
         />
       ) : (
         <span className="text-[10px] font-bold">

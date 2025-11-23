@@ -10,18 +10,38 @@ export type WalletAddress = string
 
 // 개발용: RLS가 비활성화된 상태에서 인증 없이 작업
 
-export async function upsertUser(params: { walletAddress: WalletAddress; authUserId?: string }) {
-  const { walletAddress, authUserId } = params
+export async function upsertUser(params: { 
+  walletAddress: WalletAddress; 
+  userFid?: number | null;
+  userName?: string | null;
+  userPfpUrl?: string | null;
+}) {
+  const { walletAddress, userFid, userName, userPfpUrl } = params
   return supabase
     .from('users')
-    .upsert({ wallet_address: walletAddress.toLowerCase(), auth_user_id: authUserId ?? null }, { onConflict: 'wallet_address' })
+    .upsert({ 
+      wallet_address: walletAddress.toLowerCase(), 
+      user_fid: userFid ?? null,
+      user_name: userName ?? null,
+      user_pfp_url: userPfpUrl ?? null
+    }, { onConflict: 'wallet_address' })
     .select('*')
     .single()
 }
 
-export async function ensureUserWithWallet(walletAddress: WalletAddress) {
+export async function ensureUserWithWallet(
+  walletAddress: WalletAddress,
+  userFid?: number | null,
+  userName?: string | null,
+  userPfpUrl?: string | null
+) {
   // 개발용: RLS가 비활성화된 상태에서 직접 upsert
-  const { data, error } = await upsertUser({ walletAddress, authUserId: undefined })
+  const { data, error } = await upsertUser({ 
+    walletAddress, 
+    userFid: userFid ?? null,
+    userName: userName ?? null,
+    userPfpUrl: userPfpUrl ?? null
+  })
   if (error) throw error
   return data
 }
@@ -125,6 +145,116 @@ export async function getMyReviews(walletAddress: WalletAddress) {
   return data
 }
 
+// UTC 기준 24시간 내 리뷰 작성 개수 확인
+export async function getReviewCountLast24Hours(walletAddress: WalletAddress): Promise<number> {
+  // 현재 UTC 시간
+  const now = new Date();
+  const utcNow = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours(),
+    now.getUTCMinutes(),
+    now.getUTCSeconds()
+  ));
+  
+  // UTC 기준 오늘 00시00분
+  const todayUTC = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    0, 0, 0, 0
+  ));
+  
+  // 24시간 전 (오늘 00시00분)
+  const twentyFourHoursAgo = todayUTC;
+  
+  const { count, error } = await supabase
+    .from('reviews')
+    .select('*', { count: 'exact', head: true })
+    .eq('author_wallet', walletAddress.toLowerCase())
+    .gte('created_at', twentyFourHoursAgo.toISOString())
+    .lte('created_at', utcNow.toISOString());
+  
+  if (error) {
+    console.error("24시간 내 리뷰 개수 조회 실패:", error);
+    throw error;
+  }
+  
+  return count || 0;
+}
+
+// 장소의 리뷰 개수와 평균 평점 가져오기
+export async function getPlaceReviewStats(placeId: string): Promise<{
+  count: number;
+  averageRating: number;
+}> {
+  try {
+    // place_id가 UUID인지 Google place_id인지 확인
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(placeId);
+    
+    let actualPlaceId: string;
+    
+    if (isUUID) {
+      // UUID인 경우 직접 사용
+      actualPlaceId = placeId;
+    } else {
+      // Google place_id인 경우 places 테이블에서 UUID 찾기
+      const { data: placeData } = await supabase
+        .from("places")
+        .select("id")
+        .eq("google_place_id", placeId)
+        .single();
+      
+      if (!placeData?.id) {
+        // places 테이블에 없는 경우 빈 결과 반환
+        return { count: 0, averageRating: 0 };
+      }
+      
+      actualPlaceId = placeData.id;
+    }
+    
+    // 리뷰 개수와 평균 평점 계산
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("rating", { count: "exact" })
+      .eq("place_id", actualPlaceId)
+      .is("deleted_at", null);
+    
+    if (error) {
+      console.error("리뷰 통계 조회 실패:", error);
+      return { count: 0, averageRating: 0 };
+    }
+    
+    const count = data?.length || 0;
+    
+    if (count === 0) {
+      return { count: 0, averageRating: 0 };
+    }
+    
+    // 평균 평점 계산
+    const sum = data.reduce((acc, review) => acc + (review.rating || 0), 0);
+    const rawAverage = sum / count;
+    
+    // 소수점 두자리에서 반올림
+    const roundedToTwoDecimals = Math.round(rawAverage * 100) / 100;
+    
+    // 0.5 단위로 반올림 (0, 0.5, 1.0, 1.5, 2.0, ..., 5.0)
+    const roundedToHalf = Math.round(roundedToTwoDecimals * 2) / 2;
+    
+    // 0~5 범위로 제한
+    const averageRating = Math.max(0, Math.min(5, roundedToHalf));
+    
+    return {
+      count,
+      averageRating,
+    };
+  } catch (error) {
+    console.error("리뷰 통계 조회 중 오류:", error);
+    return { count: 0, averageRating: 0 };
+  }
+}
+
 export async function getMyBookmarks(walletAddress: WalletAddress) {
   const { data, error } = await supabase
     .from('bookmarks')
@@ -136,7 +266,12 @@ export async function getMyBookmarks(walletAddress: WalletAddress) {
 }
 
 // 리뷰와 함께 이미지 URL 가져오기
-export async function getReviewsWithImages(placeId?: string, userWallet?: string) {
+export async function getReviewsWithImages(
+  placeId?: string,
+  userWallet?: string,
+  limit?: number,
+  offset?: number
+) {
   const query = supabase
     .from('reviews')
     .select(`
@@ -153,6 +288,11 @@ export async function getReviewsWithImages(placeId?: string, userWallet?: string
         address_text,
         latitude,
         longitude
+      ),
+      users!reviews_author_wallet_fkey (
+        user_name,
+        user_pfp_url,
+        wallet_address
       )
     `)
     .is('deleted_at', null) // 삭제되지 않은 리뷰만
@@ -165,6 +305,15 @@ export async function getReviewsWithImages(placeId?: string, userWallet?: string
   if (userWallet) {
     console.log("사용자 지갑으로 필터링:", userWallet.toLowerCase())
     query.eq('author_wallet', userWallet.toLowerCase())
+  }
+  
+  // limit과 offset 처리 (range를 사용하면 limit이 무시되므로 range만 사용)
+  if (limit !== undefined && offset !== undefined) {
+    query.range(offset, offset + limit - 1)
+  } else if (limit !== undefined) {
+    query.limit(limit)
+  } else if (offset !== undefined) {
+    query.range(offset, offset + 19) // 기본 20개
   }
   
   const { data, error } = await query
@@ -201,7 +350,8 @@ export async function getReviewsWithImages(placeId?: string, userWallet?: string
       ...review,
       like_count: review.like_count || 0, // 실제 DB에서 가져온 값 사용
       photos: photos,
-      place: review.places
+      place: review.places,
+      users: review.users
     };
   }) || []
   
@@ -613,6 +763,100 @@ export async function addLikeToReview(
     console.error("좋아요 추가 실패:", error);
     throw error;
   }
+}
+
+// 리더보드 데이터 가져오기 (points 내림차순)
+export async function getLeaderboard() {
+  const { data, error } = await supabase
+    .from("users")
+    .select("wallet_address, user_name, user_pfp_url, points")
+    .order("points", { ascending: false });
+  
+  if (error) {
+    console.error("리더보드 데이터 조회 실패:", error);
+    throw error;
+  }
+  
+  return data || [];
+}
+
+// UTC 기준 오늘 작성한 리뷰 개수 가져오기 (최대 5개)
+export async function getTodayReviewCount(walletAddress: string): Promise<number> {
+  // UTC 기준 오늘 00:00:00
+  const now = new Date();
+  const todayUTC = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    0, 0, 0, 0
+  ));
+  
+  // UTC 기준 오늘 23:59:59.999
+  const todayEndUTC = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    23, 59, 59, 999
+  ));
+  
+  const { count, error } = await supabase
+    .from("reviews")
+    .select("*", { count: "exact", head: true })
+    .eq("author_wallet", walletAddress.toLowerCase())
+    .gte("created_at", todayUTC.toISOString())
+    .lte("created_at", todayEndUTC.toISOString())
+    .is("deleted_at", null);
+  
+  if (error) {
+    console.error("오늘 작성한 리뷰 개수 조회 실패:", error);
+    return 0;
+  }
+  
+  // 최대 5개까지만 반환
+  return Math.min(count || 0, 5);
+}
+
+// 여러 사용자의 오늘 작성한 리뷰 개수 가져오기
+export async function getTodayReviewCounts(walletAddresses: string[]): Promise<Record<string, number>> {
+  // UTC 기준 오늘 00:00:00
+  const now = new Date();
+  const todayUTC = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    0, 0, 0, 0
+  ));
+  
+  // UTC 기준 오늘 23:59:59.999
+  const todayEndUTC = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    23, 59, 59, 999
+  ));
+  
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("author_wallet")
+    .in("author_wallet", walletAddresses.map(addr => addr.toLowerCase()))
+    .gte("created_at", todayUTC.toISOString())
+    .lte("created_at", todayEndUTC.toISOString())
+    .is("deleted_at", null);
+  
+  if (error) {
+    console.error("오늘 작성한 리뷰 개수 조회 실패:", error);
+    return {};
+  }
+  
+  // 각 지갑 주소별 리뷰 개수 계산 (최대 5개)
+  const counts: Record<string, number> = {};
+  walletAddresses.forEach(addr => {
+    const lowerAddr = addr.toLowerCase();
+    const count = data?.filter(r => r.author_wallet === lowerAddr).length || 0;
+    counts[addr] = Math.min(count, 5);
+  });
+  
+  return counts;
 }
 
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAppKitAccount } from "@reown/appkit/react";
 import { useAccount } from "wagmi";
 import {
   getReviewsWithImages,
@@ -100,8 +99,6 @@ interface ReviewData {
 const BookmarkScreen: React.FC = () => {
   const navigate = useNavigate();
   const { isConnected, address } = useAccount();
-  const { isConnected: isReownConnected, address: reownAddress } =
-    useAppKitAccount();
   const [bookmarks, setBookmarks] = useState<BookmarkData[]>([]);
   const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,9 +107,8 @@ const BookmarkScreen: React.FC = () => {
   );
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
-  // 자동 로그인 시에는 useAccount, 그 외에는 useAppKitAccount 사용
-  const isWalletConnected = isConnected || isReownConnected;
-  const walletAddress = isConnected ? address : reownAddress;
+  const isWalletConnected = isConnected;
+  const walletAddress = address;
 
   // 북마크 이미지 로드 함수
   const loadBookmarkImages = async (bookmarks: BookmarkData[]) => {
@@ -127,7 +123,7 @@ const BookmarkScreen: React.FC = () => {
             .single();
 
           if (placeError || !placeData?.google_place_id) {
-            console.log(`북마크 ${bookmark.name}의 google_place_id 없음`);
+            // console.log(`북마크 ${bookmark.name}의 google_place_id 없음`);
             return bookmark;
           }
 
@@ -141,7 +137,7 @@ const BookmarkScreen: React.FC = () => {
             placeImage: placeDetails.photos[0] || undefined,
           };
         } catch (error) {
-          console.error(`북마크 ${bookmark.name} 이미지 로드 실패:`, error);
+          // console.error(`북마크 ${bookmark.name} 이미지 로드 실패:`, error);
           return bookmark;
         }
       })
@@ -154,21 +150,21 @@ const BookmarkScreen: React.FC = () => {
     const loadData = async () => {
       if (isWalletConnected && walletAddress) {
         try {
-          console.log("로딩 시작 - 지갑 주소:", walletAddress);
+          // console.log("로딩 시작 - 지갑 주소:", walletAddress);
           const [bookmarkData, reviewData] = await Promise.all([
             getBookmarkPlacesWithReviews(walletAddress),
             getReviewsWithImages(undefined, walletAddress),
           ]);
-          console.log("북마크 데이터:", bookmarkData);
-          console.log("리뷰 데이터:", reviewData);
-          console.log("리뷰 데이터 개수:", reviewData?.length || 0);
+          // console.log("북마크 데이터:", bookmarkData);
+          // console.log("리뷰 데이터:", reviewData);
+          // console.log("리뷰 데이터 개수:", reviewData?.length || 0);
 
           // 북마크 이미지 로드
           const bookmarksWithImages = await loadBookmarkImages(bookmarkData);
           setBookmarks(bookmarksWithImages);
           setReviews(reviewData);
         } catch (error) {
-          console.error("데이터 로드 실패:", error);
+          // console.error("데이터 로드 실패:", error);
         } finally {
           setLoading(false);
         }
@@ -194,7 +190,7 @@ const BookmarkScreen: React.FC = () => {
         .single();
 
       if (placeError || !placeData?.google_place_id) {
-        console.log(`북마크 ${bookmark.name}의 google_place_id 없음`);
+        // console.log(`북마크 ${bookmark.name}의 google_place_id 없음`);
         // 기본 데이터로 이동
         const slug = bookmark.name
           .toLowerCase()
@@ -231,7 +227,7 @@ const BookmarkScreen: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error("북마크 클릭 시 데이터 로드 실패:", error);
+      // console.error("북마크 클릭 시 데이터 로드 실패:", error);
       // 에러 시 기본 데이터로 이동
       const slug = bookmark.name
         .toLowerCase()
@@ -261,7 +257,7 @@ const BookmarkScreen: React.FC = () => {
         .single();
 
       if (findError) {
-        console.error("북마크 찾기 실패:", findError);
+        // console.error("북마크 찾기 실패:", findError);
         return;
       }
 
@@ -274,14 +270,14 @@ const BookmarkScreen: React.FC = () => {
           .eq("wallet_address", walletAddress.toLowerCase());
 
         if (deleteError) {
-          console.error("북마크 삭제 실패:", deleteError);
+          // console.error("북마크 삭제 실패:", deleteError);
           return;
         }
 
         setBookmarks((prev) => prev.filter((b) => b.id !== placeId));
       }
     } catch (error) {
-      console.error("북마크 제거 실패:", error);
+      // console.error("북마크 제거 실패:", error);
     }
   };
 
@@ -294,7 +290,7 @@ const BookmarkScreen: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-200 pt-12">
+    <div className="min-h-screen bg-gray-200 pt-16">
       <Header
         leftElement={
           <button
@@ -308,10 +304,11 @@ const BookmarkScreen: React.FC = () => {
           <ConnectWalletButton onOpenUserMenu={() => setIsUserMenuOpen(true)} />
         }
         centerElement={
-          <div className="flex items-center gap-0.5 text-redorange-500 text-rating-count">
-            <img src="/icons/logo.svg" alt="FavorEat" className="w-6 h-6" />
-            FavorEat
-          </div>
+          <img
+            src="/icons/icon-filled.svg"
+            alt="logo"
+            className="h-[30.75px] w-auto"
+          />
         }
       />
 
@@ -415,10 +412,10 @@ const BookmarkScreen: React.FC = () => {
                         alt={`${bookmark.name} 이미지`}
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          console.error(
-                            "가게 이미지 로드 실패:",
-                            bookmark.placeImage
-                          );
+                          // console.error(
+                          //                             "가게 이미지 로드 실패:",
+                          //                             bookmark.placeImage
+                          //                           );
                           (e.target as HTMLImageElement).style.display = "none";
                         }}
                       />
@@ -458,13 +455,37 @@ const BookmarkScreen: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1">
                         <div className="text-orange-500">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <span key={i}>
-                              {i < Math.round(bookmark.averageRating)
-                                ? "★"
-                                : "☆"}
-                            </span>
-                          ))}
+                          {Array.from({ length: 5 }).map((_, i) => {
+                            const starValue = i + 1;
+                            const rating = bookmark.averageRating || 0;
+                            const clampedRating = Math.min(
+                              5,
+                              Math.max(0, rating)
+                            );
+
+                            // 별점이 해당 별의 값 이상이면 채워진 별
+                            if (clampedRating >= starValue) {
+                              return <span key={i}>★</span>;
+                            }
+                            // 별점이 해당 별의 값 - 0.5 이상이면 반 별
+                            else if (clampedRating >= starValue - 0.5) {
+                              return (
+                                <span key={i} className="relative inline-block">
+                                  <span className="text-orange-500">☆</span>
+                                  <span
+                                    className="absolute left-0 top-0 overflow-hidden text-orange-500"
+                                    style={{ width: "52.5%" }}
+                                  >
+                                    ★
+                                  </span>
+                                </span>
+                              );
+                            }
+                            // 그 외는 빈 별
+                            else {
+                              return <span key={i}>☆</span>;
+                            }
+                          })}
                         </div>
                       </div>
                     </div>
@@ -497,9 +518,9 @@ const BookmarkScreen: React.FC = () => {
                           .single();
 
                       if (placeError || !placeData?.google_place_id) {
-                        console.log(
-                          `리뷰 ${review.place.name}의 google_place_id 없음`
-                        );
+                        // console.log(
+                        //                           `리뷰 ${review.place.name}의 google_place_id 없음`
+                        //                         );
                         // 기본 데이터로 이동
                         const slug = review.place.name
                           .toLowerCase()
@@ -539,7 +560,7 @@ const BookmarkScreen: React.FC = () => {
                         },
                       });
                     } catch (error) {
-                      console.error("리뷰 클릭 시 데이터 로드 실패:", error);
+                      // console.error("리뷰 클릭 시 데이터 로드 실패:", error);
                       // 에러 시 기본 데이터로 이동
                       const slug = review.place.name
                         .toLowerCase()
@@ -589,10 +610,10 @@ const BookmarkScreen: React.FC = () => {
                               alt={`리뷰 이미지 ${index + 1}`}
                               className="w-full h-full object-cover rounded-lg"
                               onError={(e) => {
-                                console.error(
-                                  `리뷰 이미지 로드 실패 [${index}]:`,
-                                  imageUrl
-                                );
+                                // console.error(
+                                //                                   `리뷰 이미지 로드 실패 [${index}]:`,
+                                //                                   imageUrl
+                                //                                 );
                                 (e.target as HTMLImageElement).style.display =
                                   "none";
                               }}
@@ -605,11 +626,34 @@ const BookmarkScreen: React.FC = () => {
 
                   <div className="flex items-center justify-between text-sm text-gray-500">
                     <div className="text-orange-500">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <span key={i}>
-                          {i < Math.floor(review.rating) ? "★" : "☆"}
-                        </span>
-                      ))}
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const starValue = i + 1;
+                        const rating = review.rating || 0;
+                        const clampedRating = Math.min(5, Math.max(0, rating));
+
+                        // 별점이 해당 별의 값 이상이면 채워진 별
+                        if (clampedRating >= starValue) {
+                          return <span key={i}>★</span>;
+                        }
+                        // 별점이 해당 별의 값 - 0.5 이상이면 반 별
+                        else if (clampedRating >= starValue - 0.5) {
+                          return (
+                            <span key={i} className="relative inline-block">
+                              <span className="text-orange-500">☆</span>
+                              <span
+                                className="absolute left-0 top-0 overflow-hidden text-orange-500"
+                                style={{ width: "52.5%" }}
+                              >
+                                ★
+                              </span>
+                            </span>
+                          );
+                        }
+                        // 그 외는 빈 별
+                        else {
+                          return <span key={i}>☆</span>;
+                        }
+                      })}
                     </div>
                     <div className="flex justify-center items-center gap-1">
                       <img

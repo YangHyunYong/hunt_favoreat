@@ -1,17 +1,8 @@
 import { farcasterMiniApp as miniAppConnector } from "@farcaster/miniapp-wagmi-connector";
 import { createConfig } from "wagmi";
 import { base } from "wagmi/chains";
-import { createAppKit } from '@reown/appkit'
-import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { fallback, http as viemHttp } from "viem";
 
-
-const projectId = import.meta.env.VITE_WC_PROJECT_ID // 실제 프로젝트 ID로 교체 필요
-
-const wagmiAdapter = new WagmiAdapter({
-  networks: [base],
-  projectId
-})
 
 export const config = createConfig({
   chains: [base],
@@ -32,19 +23,6 @@ export const config = createConfig({
     ),  
   },
 });
-
-// 3. Create AppKit
-export const modal = createAppKit({
-  adapters: [wagmiAdapter],
-  networks: [base],
-  projectId,
-  metadata: {
-    name: 'FavorEat',
-    description: 'FavorEat Farcaster Mini App',
-    url: 'https://favoreat.com',
-    icons: ['https://avatars.githubusercontent.com/u/37784886']
-  }
-})
 
 declare module "wagmi" {
   interface Register {

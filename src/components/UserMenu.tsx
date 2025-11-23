@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  useAppKitAccount,
-  useDisconnect as useReownDisconnect,
-} from "@reown/appkit/react";
 import { useAccount, useDisconnect } from "wagmi";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { supabase } from "../supabaseClient";
@@ -16,16 +12,13 @@ interface UserMenuProps {
 const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { isConnected, address } = useAccount();
-  const { isConnected: isReownConnected, address: reownAddress } =
-    useAppKitAccount();
   const { disconnect } = useDisconnect();
-  const { disconnect: reownDisconnect } = useReownDisconnect();
   const [sdkContext, setSdkContext] = useState<any>(null);
   const [userPoints, setUserPoints] = useState<number>(0);
   const [pointsLoading, setPointsLoading] = useState<boolean>(true);
+  const [userPfpUrl, setUserPfpUrl] = useState<string | null>(null);
 
-  // 자동 로그인 시에는 useAccount, 그 외에는 useAppKitAccount 사용
-  const walletAddress = isConnected ? address : reownAddress;
+  const walletAddress = address;
 
   useEffect(() => {
     const loadSdkContext = async () => {
@@ -43,19 +36,22 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
           setPointsLoading(true);
           const { data, error } = await supabase
             .from("users")
-            .select("points")
+            .select("points, user_pfp_url")
             .eq("wallet_address", walletAddress.toLowerCase())
             .single();
 
           if (error) {
             console.error("포인트 조회 실패:", error);
             setUserPoints(0);
+            setUserPfpUrl(null);
           } else {
             setUserPoints(data?.points || 0);
+            setUserPfpUrl(data?.user_pfp_url || null);
           }
         } catch (error) {
           console.error("포인트 조회 에러:", error);
           setUserPoints(0);
+          setUserPfpUrl(null);
         } finally {
           setPointsLoading(false);
         }
@@ -79,17 +75,11 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
     onClose();
   };
 
-  const handleDisconnect = async () => {
+  const handleDisconnect = () => {
     try {
-      await disconnect();
+      disconnect();
     } catch (e) {
       console.warn("Wagmi disconnect failed (ignored):", e);
-    }
-
-    try {
-      await reownDisconnect();
-    } catch (e) {
-      console.warn("Reown disconnect failed (ignored):", e);
     }
 
     // 스토리지 정리
@@ -169,12 +159,18 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
         <div className="flex flex-col items-center gap-12">
           {/* 프로필 + 주소 */}
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 text-[14px] rounded-full bg-orange-100 flex items-center justify-center font-semibold text-orange-600">
-              {sdkContext?.user?.pfpUrl && isConnected && !isReownConnected ? (
+            <div className="w-10 h-10 text-[14px] rounded-full bg-[#e5e5e5] flex items-center justify-center font-semibold text-orange-600 overflow-hidden">
+              {userPfpUrl ? (
+                <img
+                  src={userPfpUrl}
+                  alt="Profile"
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              ) : sdkContext?.user?.pfpUrl && isConnected ? (
                 <img
                   src={sdkContext.user.pfpUrl}
                   alt="Profile"
-                  className="w-10 h-10 rounded-full"
+                  className="w-10 h-10 rounded-full object-cover"
                 />
               ) : (
                 <span className="text-[10px] font-bold">

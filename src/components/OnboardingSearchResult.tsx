@@ -85,7 +85,7 @@ const OnboardingSearchResult: React.FC<OnboardingSearchResultProps> = ({
         const details = await Promise.all(detailsPromises);
         setPlaceDetails(details);
       } catch (error) {
-        console.error("Error fetching place details:", error);
+        // console.error("Error fetching place details:", error);
         // 에러 발생 시 기본 정보 사용
         const defaultDetails: PlaceDetails[] = results.map((result) => ({
           name: result.structured_formatting?.main_text || result.description,

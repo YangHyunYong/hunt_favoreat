@@ -9,7 +9,7 @@ interface NavigatorProps {
 
 const Navigator: React.FC<NavigatorProps> = ({ activeTab, onTabChange }) => {
   return (
-    <div className="fixed top-12 left-0 right-0 z-40 h-12 bg-white border-b border-gray-200 flex gap-2 items-center justify-center px-4">
+    <div className="fixed top-16 left-0 right-0 z-40 h-12 bg-white border-b border-gray-200 flex gap-2 items-center justify-center px-4">
       <button
         onClick={() => onTabChange("recent")}
         className={`flex-1 flex gap-2 items-center justify-center p-2 ${

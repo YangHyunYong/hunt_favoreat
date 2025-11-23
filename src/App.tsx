@@ -7,28 +7,25 @@ import StoreDetailPage from "./pages/StoreDetailPage";
 import StoreListPage from "./pages/StoreListPage";
 import BookmarkPage from "./pages/BookmarkPage";
 import OnboardingPage from "./pages/OnboardingPage";
-import RecentPage from "./pages/RecentPage";
 
 function App() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       await sdk.actions.ready();
       await sdk.actions.addMiniApp();
-    }, 1500);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, []);
 
   return (
     <Routes>
-      {/* <Route path="/" element={<MainPage />} /> */}
       <Route path="/" element={<OnboardingPage />} />
       <Route path="/main" element={<MainPage />} />
       <Route path="/intro" element={<LandingPage />} />
       <Route path="/stores" element={<StoreListPage />} />
       <Route path="/store/:id" element={<StoreDetailPage />} />
       <Route path="/bookmarks" element={<BookmarkPage />} />
-      <Route path="/recent" element={<RecentPage />} />
     </Routes>
   );
 }

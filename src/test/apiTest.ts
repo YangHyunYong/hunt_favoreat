@@ -7,7 +7,7 @@ export class ApiTester {
   async testEnsureUser(address: string) {
     if (!address) return;
     try {
-      await ensureUserWithWallet(address);
+      await ensureUserWithWallet(address, null, null, null);
       console.log("유저 등록 성공!");
     } catch (error) {
       console.error("유저 등록 실패: " + error);

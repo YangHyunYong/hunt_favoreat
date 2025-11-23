@@ -75,7 +75,7 @@ const OnboardingSearch: React.FC<OnboardingSearchProps> = ({
       }
 
       if (!window.google?.maps?.places) {
-        console.warn("Google Maps API is not loaded");
+        // console.warn("Google Maps API is not loaded");
         setPredictions([]);
         setLoadingPred(false);
         return;
@@ -99,18 +99,18 @@ const OnboardingSearch: React.FC<OnboardingSearchProps> = ({
             res: google.maps.places.AutocompletePrediction[] | null,
             status: google.maps.places.PlacesServiceStatus
           ) => {
-            console.log("Search status:", status, "Results:", res?.length || 0);
+            // console.log("Search status:", status, "Results:", res?.length || 0);
             if (status === google.maps.places.PlacesServiceStatus.OK && res) {
               setPredictions(res);
             } else {
-              console.warn("Search failed or no results:", status);
+              // console.warn("Search failed or no results:", status);
               setPredictions([]);
             }
             setLoadingPred(false);
           }
         );
       } catch (e) {
-        console.error("Search error:", e);
+        // console.error("Search error:", e);
         setLoadingPred(false);
         setPredictions([]);
       }
@@ -129,15 +129,15 @@ const OnboardingSearch: React.FC<OnboardingSearchProps> = ({
       }
 
       // 콘솔에 선택된 가게 정보 출력
-      console.log("=== 선택된 가게 정보 ===");
-      console.log("selectedPrediction:", selectedPrediction);
-      console.log("place_id:", selectedPrediction.place_id);
-      console.log("place_id 존재 여부:", !!selectedPrediction.place_id);
-      console.log("description:", selectedPrediction.description);
-      console.log(
-        "structured_formatting:",
-        selectedPrediction.structured_formatting
-      );
+      // console.log("=== 선택된 가게 정보 ===");
+      // console.log("selectedPrediction:", selectedPrediction);
+      // console.log("place_id:", selectedPrediction.place_id);
+      // console.log("place_id 존재 여부:", !!selectedPrediction.place_id);
+      // console.log("description:", selectedPrediction.description);
+      // console.log(
+      //         "structured_formatting:",
+      //         selectedPrediction.structured_formatting
+      //       );
 
       if (!window.google?.maps?.places) {
         // API가 없으면 기본 정보 사용
@@ -221,8 +221,8 @@ const OnboardingSearch: React.FC<OnboardingSearchProps> = ({
               };
 
               setFullPlaceDetails(fullDetails);
-              console.log("=== 전체 상세 정보 ===");
-              console.log("fullPlaceDetails:", fullDetails);
+              // console.log("=== 전체 상세 정보 ===");
+              // console.log("fullPlaceDetails:", fullDetails);
             } else {
               // 기본값 반환
               setFullPlaceDetails({
@@ -240,7 +240,7 @@ const OnboardingSearch: React.FC<OnboardingSearchProps> = ({
           }
         );
       } catch (error) {
-        console.error("Error fetching place details:", error);
+        // console.error("Error fetching place details:", error);
         // 에러 발생 시 기본 정보 사용
         setPlaceDetails({
           name:
@@ -361,9 +361,9 @@ const OnboardingSearch: React.FC<OnboardingSearchProps> = ({
     if (selectedPrediction && fullPlaceDetails) {
       // 선택된 항목이 있고 전체 상세 정보가 있으면 StoreDetailPage로 이동
       const slug = toSlug(fullPlaceDetails.displayName || "store");
-      console.log("=== StoreDetailPage로 이동 ===");
-      console.log("slug:", slug);
-      console.log("fullPlaceDetails:", fullPlaceDetails);
+      // console.log("=== StoreDetailPage로 이동 ===");
+      // console.log("slug:", slug);
+      // console.log("fullPlaceDetails:", fullPlaceDetails);
       navigate(`/store/${slug}`, { state: fullPlaceDetails });
       return;
     }

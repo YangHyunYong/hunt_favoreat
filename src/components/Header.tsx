@@ -15,7 +15,7 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 flex w-full h-12 px-4 justify-between items-center bg-white ${className}`}
+      className={`fixed top-0 left-0 right-0 z-50 flex w-full h-16 px-4 justify-between items-center bg-white ${className}`}
     >
       {/* 왼쪽 요소 */}
       <div className="flex items-center justify-start flex-[1] min-w-[40px]">
