@@ -96,7 +96,40 @@ function toSlug(name: string) {
 // 마커 아이콘 캐시 (성능 최적화)
 const markerIconCache = new Map<string, string>();
 
-// 핀 아이콘 안에 pfp 이미지를 그리는 함수 (최적화 버전)
+// 이미지를 base64로 변환하는 함수
+function imageToBase64(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("Canvas context not available"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      try {
+        const base64 = canvas.toDataURL("image/png");
+        resolve(base64);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    img.onerror = () => reject(new Error("Image load failed"));
+
+    // 타임아웃 설정 (2초)
+    setTimeout(() => reject(new Error("Image load timeout")), 2000);
+
+    img.src = url;
+  });
+}
+
+// 핀 아이콘 안에 pfp 이미지를 그리는 함수 (SVG 기반, base64 이미지 포함)
 async function createCustomMarkerIcon(pfpUrl: string | null): Promise<string> {
   // 캐시 키 생성
   const cacheKey = pfpUrl || "default";
@@ -104,131 +137,73 @@ async function createCustomMarkerIcon(pfpUrl: string | null): Promise<string> {
     return markerIconCache.get(cacheKey)!;
   }
 
-  return new Promise((resolve) => {
-    const canvas = document.createElement("canvas");
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    const baseSize = 48; // 마커 전체 크기 (표시 크기)
-    // 성능 최적화: 스케일을 2배로 제한 (3배 -> 2배로 줄여서 렌더링 속도 향상)
-    const scale = Math.min(Math.max(devicePixelRatio, 1), 2);
-    const size = baseSize * scale;
+  const baseSize = 48;
+  const centerX = baseSize / 2;
+  const centerY = 20; // 원형 중심 Y 위치 (tipHeight/2만큼 위로 올림)
+  const radius = 16; // 원형 부분 반지름
+  const tipHeight = 8; // 아래쪽 뾰족한 부분 높이
+  const tipWidth = 9; // 아래쪽 뾰족한 부분 너비
+  const imageRadius = radius; // 이미지 반지름 (테두리 여백)
 
-    canvas.width = size;
-    canvas.height = size;
-    canvas.style.width = `${baseSize}px`;
-    canvas.style.height = `${baseSize}px`;
+  // 삼각형 좌표 계산
+  const circleBottom = centerY + radius; // 원형의 아래쪽 끝 (y = 20 + 19 = 39)
+  const tipTopLeft = circleBottom - tipHeight / 3; // 삼각형 왼쪽 상단 (y = 39 - 1.67 = 37.33)
+  const tipTopRight = circleBottom - tipHeight / 3; // 삼각형 오른쪽 상단 (y = 37.33)
+  const tipBottom = circleBottom + tipHeight / 2; // 삼각형 아래쪽 뾰족한 점 (y = 39 + 2.5 = 41.5)
+  const tipLeftX = centerX - tipWidth / 3; // 삼각형 왼쪽 X (x = 24 - 3 = 21)
+  const tipRightX = centerX + tipWidth / 3; // 삼각형 오른쪽 X (x = 24 + 3 = 27)
 
-    const ctx = canvas.getContext("2d", {
-      willReadFrequently: false,
-      alpha: true,
-    });
+  let imageBase64: string | null = null;
 
-    if (!ctx) {
-      // 실패 시 기본 핀 SVG 반환
-      const defaultIcon = createDefaultPinIcon();
-      markerIconCache.set(cacheKey, defaultIcon);
-      resolve(defaultIcon);
-      return;
+  // pfp 이미지가 있으면 base64로 변환
+  if (pfpUrl) {
+    try {
+      imageBase64 = await imageToBase64(pfpUrl);
+    } catch (error) {
+      // 이미지 로드 실패 시 null로 처리 (기본 핀만 표시)
+      // console.warn("pfp 이미지 로드 실패:", error);
     }
+  }
 
-    // 이미지 스무딩 설정
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-
-    // 고해상도를 위한 스케일 조정
-    ctx.scale(scale, scale);
-
-    // 핀 모양 그리기 (말풍선 형태)
-    const centerX = baseSize / 2;
-    const centerY = baseSize / 2;
-    const radius = 19; // 원형 부분 반지름
-    const tipHeight = 5; // 아래쪽 뾰족한 부분 높이
-    const tipWidth = 9; // 아래쪽 뾰족한 부분 너비
-
-    // 핀 배경 그리기
-    ctx.beginPath();
-    // 위쪽 원형 부분
-    ctx.arc(centerX, centerY - tipHeight / 2, radius, 0, Math.PI * 2);
-    // 아래쪽 뾰족한 부분 (삼각형)
-    ctx.moveTo(centerX - tipWidth / 3, centerY + radius - tipHeight / 3);
-    ctx.lineTo(centerX, centerY + radius + tipHeight / 2);
-    ctx.lineTo(centerX + tipWidth / 3, centerY + radius - tipHeight / 3);
-    ctx.closePath();
-
-    ctx.strokeStyle = "#FF4500";
-    ctx.lineWidth = 4;
-    ctx.stroke();
-
-    if (pfpUrl) {
-      // pfp 이미지 로드 및 그리기 (타임아웃 추가)
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-
-      // 타임아웃 설정 (1초) - 빠른 실패 처리
-      const timeout = setTimeout(() => {
-        const defaultIcon = canvas.toDataURL("image/png", 0.85);
-        markerIconCache.set(cacheKey, defaultIcon);
-        resolve(defaultIcon);
-      }, 1000);
-
-      img.onload = () => {
-        clearTimeout(timeout);
-        // 원형 클리핑 영역 설정
-        ctx.save();
-        ctx.beginPath();
-        const imageRadius = radius - 1; // 테두리를 위한 여백
-        ctx.arc(centerX, centerY - tipHeight / 2, imageRadius, 0, Math.PI * 2);
-        ctx.clip();
-
-        // 이미지 그리기
-        const imageSize = imageRadius * 2;
-        const sourceSize = Math.min(img.width, img.height);
-        const sourceX = (img.width - sourceSize) / 2;
-        const sourceY = (img.height - sourceSize) / 2;
-
-        ctx.drawImage(
-          img,
-          sourceX,
-          sourceY,
-          sourceSize,
-          sourceSize,
-          centerX - imageRadius,
-          centerY - tipHeight / 2 - imageRadius,
-          imageSize,
-          imageSize
-        );
-
-        ctx.restore();
-        // 품질을 0.85로 낮춰서 성능 향상 (1.0 -> 0.85)
-        const iconUrl = canvas.toDataURL("image/png", 0.85);
-        markerIconCache.set(cacheKey, iconUrl);
-        resolve(iconUrl);
-      };
-      img.onerror = () => {
-        clearTimeout(timeout);
-        // 이미지 로드 실패 시 기본 핀만 반환
-        const defaultIcon = canvas.toDataURL("image/png", 0.85);
-        markerIconCache.set(cacheKey, defaultIcon);
-        resolve(defaultIcon);
-      };
-      img.src = pfpUrl;
-    } else {
-      // pfpUrl이 없으면 기본 핀만 반환
-      const defaultIcon = canvas.toDataURL("image/png", 0.85);
-      markerIconCache.set(cacheKey, defaultIcon);
-      resolve(defaultIcon);
-    }
-  });
-}
-
-// 기본 핀 아이콘 생성 (SVG 기반, 빠른 렌더링)
-function createDefaultPinIcon(): string {
-  const svg = `
-    <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="24" cy="20" r="19" fill="none" stroke="#FF4500" stroke-width="4"/>
-      <path d="M 20 35 L 24 42 L 28 35 Z" fill="#FF4500"/>
+  // SVG 생성 (base64 이미지 포함)
+  let svg = `
+    <svg width="${baseSize}" height="${baseSize}" viewBox="0 0 ${baseSize} ${baseSize}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <clipPath id="circleClip-${cacheKey.replace(/[^a-zA-Z0-9]/g, "")}">
+          <circle cx="${centerX}" cy="${centerY}" r="${imageRadius}"/>
+        </clipPath>
+      </defs>
+      
+      <!-- 원형 테두리 -->
+      <circle cx="${centerX}" cy="${centerY}" r="${radius}" fill="none" stroke="#FF4500" stroke-width="4"/>
+      
+      <!-- 아래쪽 뾰족한 부분 (삼각형) - 원형과 자연스럽게 연결 -->
+      <path d="M ${tipLeftX} ${tipTopLeft} L ${centerX} ${tipBottom} L ${tipRightX} ${tipTopRight} Z" fill="#FF4500" stroke="#FF4500" stroke-width="4" stroke-linejoin="round"/>
+      
+      ${
+        imageBase64
+          ? `
+      <!-- pfp 이미지 (base64, 원형 클리핑) -->
+      <image 
+        href="${imageBase64}" 
+        x="${centerX - imageRadius}" 
+        y="${centerY - imageRadius}" 
+        width="${imageRadius * 2}" 
+        height="${imageRadius * 2}" 
+        clip-path="url(#circleClip-${cacheKey.replace(/[^a-zA-Z0-9]/g, "")})"
+        preserveAspectRatio="xMidYMid slice"
+      />
+      `
+          : ""
+      }
     </svg>
   `;
-  return "data:image/svg+xml;base64," + btoa(svg);
+
+  // SVG를 Data URL로 변환
+  const svgDataUrl =
+    "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  markerIconCache.set(cacheKey, svgDataUrl);
+  return svgDataUrl;
 }
 
 // Fetch Google Place details by placeId and return typed data (기존 Places API 사용).
@@ -304,28 +279,24 @@ function MapView({
 
   // userPfpUrl 변경 시 마커 아이콘 업데이트 (비동기, 블로킹 없음)
   useEffect(() => {
-    const updateMarkerIcon = async () => {
-      if (markerRef.current && userPfpUrl !== undefined && gMapRef.current) {
-        // 비동기로 아이콘 생성 (지도 렌더링을 블로킹하지 않음)
-        createCustomMarkerIcon(userPfpUrl || null)
-          .then((iconUrl) => {
-            if (markerRef.current) {
-              const markerIcon = {
-                url: iconUrl,
-                scaledSize: new google.maps.Size(48, 48),
-                size: new google.maps.Size(48, 48),
-                anchor: new google.maps.Point(24, 48), // 아래쪽 뾰족한 부분이 위치를 가리키도록
-              };
-              markerRef.current.setIcon(markerIcon);
-            }
-          })
-          .catch((_error) => {
-            // 실패해도 기존 마커는 유지
-          });
-      }
-    };
-
-    updateMarkerIcon();
+    if (markerRef.current && userPfpUrl !== undefined && gMapRef.current) {
+      // 비동기로 아이콘 생성 (렌더링 블로킹 방지)
+      createCustomMarkerIcon(userPfpUrl || null)
+        .then((iconUrl) => {
+          if (markerRef.current) {
+            const markerIcon = {
+              url: iconUrl,
+              scaledSize: new google.maps.Size(48, 48),
+              size: new google.maps.Size(48, 48),
+              anchor: new google.maps.Point(24, 48), // 아래쪽 뾰족한 부분이 위치를 가리키도록
+            };
+            markerRef.current.setIcon(markerIcon);
+          }
+        })
+        .catch((_error) => {
+          // 실패해도 기존 마커는 유지
+        });
+    }
   }, [userPfpUrl]);
 
   useEffect(() => {
