@@ -83,8 +83,8 @@ const OnboardingPage: React.FC = () => {
       });
     };
 
-    loadGoogleMapsScript().catch((error) => {
-      // console.error("Google Maps API 로드 실패:", error);
+    loadGoogleMapsScript().catch((_error) => {
+      // console.error("Google Maps API 로드 실패:", _error);
     });
   }, []);
 
@@ -112,9 +112,9 @@ const OnboardingPage: React.FC = () => {
     setShowSearchResult(true);
   };
 
-  const handlePlaceSelect = (placeId: string) => {
+  const handlePlaceSelect = (_placeId: string) => {
     // TODO: Handle place selection
-    // console.log("Place selected:", placeId);
+    // console.log("Place selected:", _placeId);
   };
 
   return (

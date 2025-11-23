@@ -156,8 +156,8 @@ const StoreListScreen: React.FC = () => {
             lng: position.coords.longitude,
           });
         },
-        (error) => {
-          // console.warn("위치 정보를 가져올 수 없습니다:", error);
+        (_error) => {
+          // console.warn("위치 정보를 가져올 수 없습니다:", _error);
           // 기본값: 서울시청
           resolve({ lat: 37.37, lng: 126.9562 });
         }
