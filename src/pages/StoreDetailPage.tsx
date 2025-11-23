@@ -1471,7 +1471,7 @@ const StoreDetailScreen: React.FC = () => {
           ))}
         </div>
       ) : (
-        <div className="flex flex-col justify-start pt-[18px] text-center bg-gray-200 text-gray-600 h-screen">
+        <div className="flex flex-col justify-start pt-[18px] pb-8 text-center bg-gray-200 text-gray-600 min-h-[160px]">
           <p className="text-location-content mb-1">no review yet</p>
           <p className="text-location-content-700">Be the first reviewer</p>
           <p className="text-location-content-700">

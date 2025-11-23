@@ -385,7 +385,8 @@ function MapView({
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
-          gestureHandling: "greedy",
+          gestureHandling: "auto", // 스크롤 가능한 영역에서는 스크롤, 그 외에는 지도 제스처
+          disableDoubleClickZoom: true, // 더블 클릭 확대 비활성화
         });
         gMapRef.current = gMap;
 
