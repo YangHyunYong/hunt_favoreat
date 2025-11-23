@@ -299,6 +299,11 @@ function MapView({
   }, [userPfpUrl]);
 
   useEffect(() => {
+    // userPfpUrl이 준비될 때까지 기다림 (undefined가 아닐 때까지)
+    if (userPfpUrl === undefined) {
+      return;
+    }
+
     const loadGoogleMapsScript = () => {
       return new Promise<void>((resolve, reject) => {
         // 이미 로드되어 있는지 확인
@@ -560,13 +565,13 @@ function MapView({
       }
     }
 
-    // 최초 1회만
+    // userPfpUrl이 준비된 후에만 구글맵 초기화
     const cleanup = initMapOnce();
     return () => {
       // initMapOnce 내에서 반환한 클린업이 Promise일 수 있으니 방어
       Promise.resolve(cleanup).catch(() => {});
     };
-  }, []);
+  }, [userPfpUrl]);
 
   return (
     <div
@@ -580,7 +585,9 @@ const MainScreen: React.FC = () => {
   const location = useLocation();
   const [cityName, setCityName] = useState("");
   const { address } = useAccount();
-  const [userPfpUrl, setUserPfpUrl] = useState<string | null>(null);
+  const [userPfpUrl, setUserPfpUrl] = useState<string | null | undefined>(
+    undefined
+  );
 
   const [townName, setTownName] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<PlaceDetailsResult | null>(
