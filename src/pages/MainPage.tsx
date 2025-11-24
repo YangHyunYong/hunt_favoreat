@@ -58,7 +58,6 @@ interface MapViewProps {
   onPlaceSelected?: (details: PlaceDetailsResult) => void;
   onMapLocationChanged?: (location: { lat: number; lng: number }) => void;
   userPfpUrl?: string | null;
-  activeTab?: TabType;
 }
 
 interface PlaceDetailsResult {
@@ -253,7 +252,6 @@ function MapView({
   onPlaceSelected,
   onMapLocationChanged,
   userPfpUrl,
-  activeTab,
 }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
 
@@ -375,7 +373,7 @@ function MapView({
         }
 
         // 기본 위치 (서울 시청)로 먼저 지도 표시 (geolocation 대기하지 않음)
-        let position = { lat: 37.5667467, lng: 126.9780429 };
+        let position = { lat: 37.37, lng: 126.9562 };
 
         console.log("Google Maps 라이브러리 로드 완료");
 
@@ -404,14 +402,16 @@ function MapView({
           }
         }
 
-        // geolocation 로직을 별도 함수로 추출 (재사용 가능)
-        const requestUserLocation = () => {
-          if (!gMapRef.current || !("geolocation" in navigator)) {
-            return;
-          }
+        // geolocation은 비동기로 처리하여 지도 표시를 블로킹하지 않음
+        if ("geolocation" in navigator) {
+          // 타임아웃 설정 (5초)
+          const timeoutId = setTimeout(() => {
+            // console.warn("위치 정보 가져오기 타임아웃");
+          }, 5000);
 
           navigator.geolocation.getCurrentPosition(
             (pos) => {
+              clearTimeout(timeoutId);
               const newPosition = {
                 lat: pos.coords.latitude,
                 lng: pos.coords.longitude,
@@ -450,17 +450,15 @@ function MapView({
               // console.log("현재 위치 가져오기 성공:", newPosition);
             },
             (_e) => {
+              clearTimeout(timeoutId);
               // console.warn("위치 정보를 가져오지 못했습니다:", _e);
             },
             {
               timeout: 3000, // 3초 타임아웃
-              maximumAge: 0, // 캐시 사용 안 함 (항상 최신 위치)
+              maximumAge: 60000, // 1분 이내 캐시된 위치 사용
             }
           );
-        };
-
-        // 초기 geolocation 요청
-        requestUserLocation();
+        }
 
         // 마커 초기화: 먼저 기본 마커를 빠르게 표시하고, 커스텀 마커가 준비되면 교체
         const initializeMarker = () => {
@@ -597,7 +595,30 @@ function MapView({
           handlePanToPlaceId as EventListener
         );
 
-        // 기본 위치 geocoding은 제거 (geolocation이 성공할 때만 실행)
+        // 주소 -> 도시/동네 정보 콜백
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode(
+          { location: position },
+          (results: any, status: any) => {
+            if (status === "OK" && results[0]) {
+              const components = results[0].address_components;
+              let city = "",
+                town = "";
+              components.forEach((c: any) => {
+                if (c.types.includes("country")) {
+                  city = c.long_name;
+                }
+                if (
+                  c.types.includes("locality") ||
+                  c.types.includes("sublocality")
+                ) {
+                  town = c.long_name;
+                }
+              });
+              onLocationResolvedRef.current(city, town);
+            }
+          }
+        );
 
         // 클린업
         return () => {
@@ -620,72 +641,6 @@ function MapView({
       Promise.resolve(cleanup).catch(() => {});
     };
   }, []);
-
-  // activeTab이 "near-me"로 변경될 때마다 geolocation 재요청
-  useEffect(() => {
-    if (activeTab === "near-me" && gMapRef.current) {
-      // 지도가 초기화된 후에만 geolocation 요청
-      const requestUserLocation = () => {
-        if (!gMapRef.current || !("geolocation" in navigator)) {
-          return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const newPosition = {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-            };
-            // 지도와 마커 위치 업데이트
-            if (gMapRef.current) {
-              gMapRef.current.setCenter(newPosition);
-              if (markerRef.current) {
-                markerRef.current.setPosition(newPosition);
-              }
-            }
-            // 실제 위치에 대한 geocoding 실행
-            const geocoder = new google.maps.Geocoder();
-            geocoder.geocode(
-              { location: newPosition },
-              (results: any, status: any) => {
-                if (status === "OK" && results?.[0]) {
-                  const components = results[0].address_components;
-                  let city = "",
-                    town = "";
-                  components.forEach((c: any) => {
-                    if (c.types.includes("country")) {
-                      city = c.long_name;
-                    }
-                    if (
-                      c.types.includes("locality") ||
-                      c.types.includes("sublocality")
-                    ) {
-                      town = c.long_name;
-                    }
-                  });
-                  onLocationResolvedRef.current(city, town);
-                }
-              }
-            );
-          },
-          (_e) => {
-            // console.warn("위치 정보를 가져오지 못했습니다:", _e);
-          },
-          {
-            timeout: 3000,
-            maximumAge: 0, // 캐시 사용 안 함 (항상 최신 위치)
-          }
-        );
-      };
-
-      // 지도가 준비될 때까지 약간의 지연 후 실행
-      const timer = setTimeout(() => {
-        requestUserLocation();
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-  }, [activeTab]);
 
   return (
     <div
@@ -780,37 +735,25 @@ const MainScreen: React.FC = () => {
         },
         (error) => {
           console.warn("위치 정보를 가져올 수 없습니다:", error);
-          reject(error);
-        },
-        {
-          timeout: 3000,
-          maximumAge: 60000,
+          // 기본값: 서울시청
+          resolve({ lat: 37.37, lng: 126.9562 });
         }
       );
     });
   };
 
-  // 현재 위치 가져오기 (재시도 로직 포함)
+  // 현재 위치 가져오기
   useEffect(() => {
-    const fetchCurrentLocation = async (retryCount = 0, maxRetries = 3) => {
+    const fetchCurrentLocation = async () => {
       try {
         const location = await getCurrentLocation();
         setCurrentLocation(location);
         console.log("현재 위치 가져오기 성공:", location);
       } catch (error) {
-        console.error(
-          `위치 정보 가져오기 실패 (시도 ${retryCount + 1}/${maxRetries}):`,
-          error
-        );
-
-        if (retryCount < maxRetries - 1) {
-          // 재시도 (1초 후)
-          setTimeout(() => {
-            fetchCurrentLocation(retryCount + 1, maxRetries);
-          }, 1000);
-        } else {
-          console.error("위치 정보 가져오기 최종 실패: 최대 재시도 횟수 초과");
-        }
+        console.error("위치 정보 가져오기 실패:", error);
+        // 기본값으로 서울시청 설정
+        setCurrentLocation({ lat: 37.37, lng: 126.9562 });
+        console.log("기본 위치 설정: 서울시청");
       }
     };
 
@@ -1253,7 +1196,6 @@ const MainScreen: React.FC = () => {
             // console.log("지도 위치 변경됨:", location);
           }}
           userPfpUrl={userPfpUrl}
-          activeTab={activeTab}
         />
 
         {/* 상단 */}
@@ -1341,7 +1283,10 @@ const MainScreen: React.FC = () => {
                       state: {
                         cityName,
                         townName,
-                        userLocation: currentLocation,
+                        userLocation: currentLocation || {
+                          lat: 37.37,
+                          lng: 126.9562,
+                        },
                       },
                     })
                   }
