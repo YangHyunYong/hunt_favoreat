@@ -1201,7 +1201,7 @@ const MainScreen: React.FC = () => {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="가게 이름 또는 주소 검색"
-                    className="flex-1 h-full outline-none bg-transparent text-[14px] leading-[20px] placeholder:text-gray-400"
+                    className="flex-1 h-full outline-none bg-transparent text-[16px] leading-[20px] placeholder:text-gray-400"
                   />
                   {!!query && (
                     <button
