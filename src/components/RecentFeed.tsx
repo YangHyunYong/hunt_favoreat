@@ -2,6 +2,61 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { getReviewsWithImages, supabase } from "../supabaseClient";
 
+// 이미지 크기 캐시 (메모리 + localStorage)
+const imageSizeCache = new Map<string, { width: number; height: number }>();
+const CACHE_KEY_PREFIX = "image_size_cache_";
+const MAX_CACHE_SIZE = 500; // 최대 캐시 개수
+
+// localStorage에서 캐시 로드
+const loadCacheFromStorage = () => {
+  try {
+    const keys = Object.keys(localStorage);
+    const cacheKeys = keys.filter((key) => key.startsWith(CACHE_KEY_PREFIX));
+    cacheKeys.forEach((key) => {
+      const url = key.replace(CACHE_KEY_PREFIX, "");
+      if (!url) return; // 빈 URL은 무시
+      const cached = localStorage.getItem(key);
+      if (cached) {
+        try {
+          const { width, height } = JSON.parse(cached);
+          imageSizeCache.set(url, { width, height });
+        } catch (e) {
+          // 파싱 실패 시 무시
+        }
+      }
+    });
+  } catch (e) {
+    console.warn("캐시 로드 실패:", e);
+  }
+};
+
+// localStorage에 캐시 저장
+const saveCacheToStorage = (url: string, width: number, height: number) => {
+  if (!url) return; // URL이 없으면 저장하지 않음
+  try {
+    // 캐시 크기 제한 (오래된 항목 제거)
+    if (imageSizeCache.size >= MAX_CACHE_SIZE) {
+      const firstKey = imageSizeCache.keys().next().value;
+      if (firstKey) {
+        imageSizeCache.delete(firstKey);
+        localStorage.removeItem(CACHE_KEY_PREFIX + firstKey);
+      }
+    }
+
+    imageSizeCache.set(url, { width, height });
+    localStorage.setItem(
+      CACHE_KEY_PREFIX + url,
+      JSON.stringify({ width, height })
+    );
+  } catch (e) {
+    // localStorage 용량 초과 시 메모리 캐시만 사용
+    console.warn("캐시 저장 실패:", e);
+  }
+};
+
+// 초기 캐시 로드
+loadCacheFromStorage();
+
 export interface FeedItem {
   id: string;
   type: "image" | "text";
@@ -54,17 +109,31 @@ const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
     };
   };
 
-  // 이미지 크기 확인 함수
+  // 이미지 크기 확인 함수 (캐싱 적용)
   const getImageDimensions = (
     url: string
   ): Promise<{ width: number; height: number }> => {
     return new Promise((resolve) => {
+      // 캐시 확인
+      const cached = imageSizeCache.get(url);
+      if (cached) {
+        resolve(cached);
+        return;
+      }
+
+      // 캐시에 없으면 이미지 로드
       const img = new Image();
       img.onload = () => {
-        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        const dimensions = {
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        };
+        // 캐시에 저장
+        saveCacheToStorage(url, dimensions.width, dimensions.height);
+        resolve(dimensions);
       };
       img.onerror = () => {
-        // 로드 실패 시 기본값 (정사각형)
+        // 로드 실패 시 기본값 (정사각형)을 캐시에 저장하지 않음
         resolve({ width: 1, height: 1 });
       };
       img.src = url;

@@ -41,6 +41,7 @@ interface ReviewData {
   body: string | null;
   created_at: string;
   like_count: number;
+  isLiked?: boolean; // 현재 사용자가 좋아요를 눌렀는지 여부
   photos: Array<
     | string
     | {
@@ -510,6 +511,26 @@ const StoreDetailScreen: React.FC = () => {
     setIsLoadingReviews(true);
     try {
       const reviewsData = await getReviewsWithImages(placeId);
+
+      // 현재 사용자가 좋아요를 눌렀는지 확인
+      if (address) {
+        const reviewIds = reviewsData.map((r) => r.id);
+        const { data: likedReviews, error: likeError } = await supabase
+          .from("review_likes")
+          .select("review_id")
+          .in("review_id", reviewIds)
+          .eq("liker_wallet", address.toLowerCase());
+
+        if (!likeError && likedReviews) {
+          const likedReviewIds = new Set(
+            likedReviews.map((lr) => lr.review_id)
+          );
+          reviewsData.forEach((review) => {
+            review.isLiked = likedReviewIds.has(review.id);
+          });
+        }
+      }
+
       setReviews(reviewsData);
       setCurrentPlaceId(placeId);
     } catch (error) {
@@ -1429,6 +1450,27 @@ const StoreDetailScreen: React.FC = () => {
                         return;
                       }
 
+                      // 이미 좋아요를 누른 상태라면 아무것도 하지 않음
+                      if (review.isLiked) {
+                        return;
+                      }
+
+                      const isCurrentlyLiked = review.isLiked || false;
+                      const currentLikeCount = review.like_count || 0;
+
+                      // Optimistic Update: 먼저 UI 업데이트
+                      setReviews((prev) =>
+                        prev.map((r) =>
+                          r.id === review.id
+                            ? {
+                                ...r,
+                                isLiked: true,
+                                like_count: currentLikeCount + 1,
+                              }
+                            : r
+                        )
+                      );
+
                       try {
                         console.log("좋아요 클릭:", review.id);
 
@@ -1438,11 +1480,15 @@ const StoreDetailScreen: React.FC = () => {
                         );
 
                         if (result.success) {
-                          // UI에서 즉시 좋아요 수 업데이트
+                          // DB 반영 후 최종 상태 업데이트
                           setReviews((prev) =>
                             prev.map((r) =>
                               r.id === review.id
-                                ? { ...r, like_count: result.newLikeCount }
+                                ? {
+                                    ...r,
+                                    isLiked: true,
+                                    like_count: result.newLikeCount,
+                                  }
                                 : r
                             )
                           );
@@ -1451,6 +1497,18 @@ const StoreDetailScreen: React.FC = () => {
                           );
                         }
                       } catch (error) {
+                        // 에러 발생 시 원래 상태로 되돌리기
+                        setReviews((prev) =>
+                          prev.map((r) =>
+                            r.id === review.id
+                              ? {
+                                  ...r,
+                                  isLiked: isCurrentlyLiked,
+                                  like_count: currentLikeCount,
+                                }
+                              : r
+                          )
+                        );
                         console.error("좋아요 실패:", error);
                         if (
                           error instanceof Error &&
@@ -1462,14 +1520,42 @@ const StoreDetailScreen: React.FC = () => {
                         }
                       }
                     }}
-                    className="flex items-center gap-1 text-gray-500 hover:text-red-500 transition-colors"
+                    className={`flex items-center gap-1 transition-colors ${
+                      review.isLiked
+                        ? "text-[#ff4500]"
+                        : "text-gray-500 hover:text-red-500"
+                    }`}
                   >
-                    <img
-                      src="/icons/thumbs-up.svg"
-                      alt="좋아요"
-                      className="w-5 h-5"
-                    />
-                    <span className="text-[15px]">{review.like_count}</span>
+                    {review.isLiked ? (
+                      <div
+                        className="w-5 h-5"
+                        style={{
+                          maskImage: "url(/icons/thumbs-up.svg)",
+                          maskSize: "contain",
+                          maskRepeat: "no-repeat",
+                          maskPosition: "center",
+                          WebkitMaskImage: "url(/icons/thumbs-up.svg)",
+                          WebkitMaskSize: "contain",
+                          WebkitMaskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          backgroundColor: "#ff4500",
+                        }}
+                        aria-label="좋아요"
+                      />
+                    ) : (
+                      <img
+                        src="/icons/thumbs-up.svg"
+                        alt="좋아요"
+                        className="w-5 h-5"
+                      />
+                    )}
+                    <span
+                      className={`text-[15px] ${
+                        review.isLiked ? "text-[#ff4500]" : ""
+                      }`}
+                    >
+                      {review.like_count}
+                    </span>
                   </button>
                 )}
               </div>

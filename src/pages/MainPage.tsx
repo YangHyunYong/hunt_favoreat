@@ -373,7 +373,7 @@ function MapView({
         }
 
         // 기본 위치 (서울 시청)로 먼저 지도 표시 (geolocation 대기하지 않음)
-        let position = { lat: 37.37, lng: 126.9562 };
+        let position = { lat: 37.5667467, lng: 126.9780429 };
 
         console.log("Google Maps 라이브러리 로드 완료");
 
@@ -735,25 +735,37 @@ const MainScreen: React.FC = () => {
         },
         (error) => {
           console.warn("위치 정보를 가져올 수 없습니다:", error);
-          // 기본값: 서울시청
-          resolve({ lat: 37.37, lng: 126.9562 });
+          reject(error);
+        },
+        {
+          timeout: 3000,
+          maximumAge: 60000,
         }
       );
     });
   };
 
-  // 현재 위치 가져오기
+  // 현재 위치 가져오기 (재시도 로직 포함)
   useEffect(() => {
-    const fetchCurrentLocation = async () => {
+    const fetchCurrentLocation = async (retryCount = 0, maxRetries = 3) => {
       try {
         const location = await getCurrentLocation();
         setCurrentLocation(location);
         console.log("현재 위치 가져오기 성공:", location);
       } catch (error) {
-        console.error("위치 정보 가져오기 실패:", error);
-        // 기본값으로 서울시청 설정
-        setCurrentLocation({ lat: 37.37, lng: 126.9562 });
-        console.log("기본 위치 설정: 서울시청");
+        console.error(
+          `위치 정보 가져오기 실패 (시도 ${retryCount + 1}/${maxRetries}):`,
+          error
+        );
+
+        if (retryCount < maxRetries - 1) {
+          // 재시도 (1초 후)
+          setTimeout(() => {
+            fetchCurrentLocation(retryCount + 1, maxRetries);
+          }, 1000);
+        } else {
+          console.error("위치 정보 가져오기 최종 실패: 최대 재시도 횟수 초과");
+        }
       }
     };
 
@@ -1171,7 +1183,7 @@ const MainScreen: React.FC = () => {
       {/* Recent 탭 */}
       {activeTab === "recent" && (
         <div className="pt-[112px] bg-gray-100 min-h-screen">
-          <RecentFeed activeTab={activeTab} />
+          <RecentFeed />
         </div>
       )}
 
@@ -1283,10 +1295,7 @@ const MainScreen: React.FC = () => {
                       state: {
                         cityName,
                         townName,
-                        userLocation: currentLocation || {
-                          lat: 37.37,
-                          lng: 126.9562,
-                        },
+                        userLocation: currentLocation,
                       },
                     })
                   }
