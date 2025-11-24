@@ -34,13 +34,7 @@ const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const ITEMS_PER_PAGE = 20;
-
-  // Pull-to-refresh 상태
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [pullDistance, setPullDistance] = useState(0);
-  const touchStartY = useRef<number>(0);
-  const touchCurrentY = useRef<number>(0);
-  const isPulling = useRef<boolean>(false);
+  const INITIAL_LOAD_COUNT = 10; // 초기 로딩 시 더 적은 데이터만 먼저 로드
 
   // 사용자 이름과 아바타 가져오기
   const getUserInfo = (review: any) => {
@@ -125,6 +119,47 @@ const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
     const rightColX = sideMargin + cardWidth + itemGap;
     const fullWidth = width - sideMargin * 2;
 
+    // 이미지가 있는 리뷰들을 먼저 수집하고 병렬로 크기 확인
+    const imageReviewData: Array<{
+      review: any;
+      photoUrl: string;
+      userInfo: ReturnType<typeof getUserInfo>;
+    }> = [];
+
+    for (const review of reviews) {
+      const photos = review.photos || [];
+      const hasImage = photos.length > 0;
+
+      if (hasImage) {
+        const firstPhoto = photos[0];
+        let photoUrl: string = "";
+        if (typeof firstPhoto === "string") {
+          photoUrl = firstPhoto;
+        } else if (firstPhoto && typeof firstPhoto === "object") {
+          photoUrl = (firstPhoto as any)?.url || "";
+        }
+
+        if (photoUrl) {
+          imageReviewData.push({
+            review,
+            photoUrl,
+            userInfo: getUserInfo(review),
+          });
+        }
+      }
+    }
+
+    // 모든 이미지 크기를 병렬로 확인 (순차 처리보다 훨씬 빠름)
+    const imageDimensions = await Promise.all(
+      imageReviewData.map(({ photoUrl }) => getImageDimensions(photoUrl))
+    );
+
+    // 이미지 크기 맵 생성 (review.id -> dimensions)
+    const imageSizeMap = new Map<string, { width: number; height: number }>();
+    imageReviewData.forEach(({ review }, index) => {
+      imageSizeMap.set(review.id, imageDimensions[index]);
+    });
+
     // 각 리뷰의 이미지 크기를 확인하고 카드 타입 결정
     for (const review of reviews) {
       const photos = review.photos || [];
@@ -149,19 +184,14 @@ const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
 
         // photoUrl이 없으면 스킵
         if (!photoUrl) {
-          // console.warn(`리뷰 ${review.id}의 이미지 URL이 없습니다.`, {
-          //   firstPhoto,
-          //   photos,
-          //   review,
-          // });
           continue;
         }
 
-        // console.log(`리뷰 ${review.id} 이미지 URL:`, photoUrl);
+        // 병렬로 확인한 이미지 크기 사용
+        const dimensions = imageSizeMap.get(review.id);
+        if (!dimensions) continue;
 
-        // 이미지 크기 확인
-        const { width: imgWidth, height: imgHeight } =
-          await getImageDimensions(photoUrl);
+        const { width: imgWidth, height: imgHeight } = dimensions;
         const cardType = getCardType(imgWidth, imgHeight);
 
         let width: number;
@@ -420,27 +450,24 @@ const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
     return () => window.removeEventListener("resize", updateContainerWidth);
   }, []);
 
-  // 최신 리뷰 가져오기 함수 (재사용 가능)
-  const fetchRecentReviews = useCallback(
-    async (isRefresh = false) => {
+  // 최신 리뷰 가져오기 (초기 로드)
+  useEffect(() => {
+    const fetchRecentReviews = async () => {
       try {
-        if (isRefresh) {
-          setIsRefreshing(true);
-        } else {
-          setLoading(true);
-        }
+        setLoading(true);
         setOffset(0);
         setHasMore(true);
 
+        // 초기 로딩 시 더 적은 데이터만 먼저 로드 (빠른 초기 표시)
         const reviews = await getReviewsWithImages(
           undefined,
           undefined,
-          ITEMS_PER_PAGE,
+          INITIAL_LOAD_COUNT,
           0
         );
         // console.log("최신 리뷰 데이터:", reviews);
 
-        if (reviews.length < ITEMS_PER_PAGE) {
+        if (reviews.length < INITIAL_LOAD_COUNT) {
           setHasMore(false);
         }
 
@@ -461,73 +488,51 @@ const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
         setContainerHeight(maxTop + 20);
 
         setFeedItems(result.items);
-        setOffset(ITEMS_PER_PAGE);
+        setOffset(INITIAL_LOAD_COUNT);
+
+        // 나머지 데이터를 백그라운드에서 로드
+        if (reviews.length === INITIAL_LOAD_COUNT) {
+          // 즉시 나머지 데이터 로드 (사용자는 이미 초기 데이터를 볼 수 있음)
+          const remainingReviews = await getReviewsWithImages(
+            undefined,
+            undefined,
+            ITEMS_PER_PAGE - INITIAL_LOAD_COUNT,
+            INITIAL_LOAD_COUNT
+          );
+
+          if (remainingReviews.length > 0) {
+            const remainingResult = await convertReviewsToItems(
+              remainingReviews,
+              result.endTop,
+              containerWidth
+            );
+
+            // 기존 아이템에 추가
+            setFeedItems((prev) => [...prev, ...remainingResult.items]);
+
+            // 컨테이너 높이 업데이트
+            const newMaxTop = Math.max(
+              ...remainingResult.items.map(
+                (item) => (item.top || 0) + (item.height || 0)
+              ),
+              maxTop
+            );
+            setContainerHeight(newMaxTop + 20);
+            setOffset(ITEMS_PER_PAGE);
+          } else {
+            setHasMore(false);
+          }
+        }
       } catch (error) {
         console.error("최신 리뷰 가져오기 실패:", error);
         setFeedItems([]);
       } finally {
-        if (isRefresh) {
-          setIsRefreshing(false);
-        } else {
-          setLoading(false);
-        }
-      }
-    },
-    [containerWidth]
-  );
-
-  // 최신 리뷰 가져오기 (초기 로드)
-  useEffect(() => {
-    fetchRecentReviews(false);
-  }, [fetchRecentReviews]);
-
-  // Pull-to-refresh 터치 이벤트 처리
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      // 스크롤이 맨 위에 있을 때만 활성화
-      if (window.scrollY === 0) {
-        touchStartY.current = e.touches[0].clientY;
-        isPulling.current = true;
+        setLoading(false);
       }
     };
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isPulling.current) return;
-
-      touchCurrentY.current = e.touches[0].clientY;
-      const deltaY = touchCurrentY.current - touchStartY.current;
-
-      // 아래로 당기는 경우만 처리
-      if (deltaY > 0 && window.scrollY === 0) {
-        e.preventDefault(); // 스크롤 방지
-        const distance = Math.min(deltaY, 100); // 최대 100px
-        setPullDistance(distance);
-      } else {
-        // 위로 올리거나 스크롤이 있으면 리셋
-        setPullDistance(0);
-        isPulling.current = false;
-      }
-    };
-
-    const handleTouchEnd = () => {
-      if (isPulling.current && pullDistance >= 60) {
-        // 60px 이상 당기면 새로고침
-        fetchRecentReviews(true);
-      }
-      setPullDistance(0);
-      isPulling.current = false;
-    };
-
-    window.addEventListener("touchstart", handleTouchStart);
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    window.addEventListener("touchend", handleTouchEnd);
-
-    return () => {
-      window.removeEventListener("touchstart", handleTouchStart);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, [pullDistance, fetchRecentReviews]);
+    fetchRecentReviews();
+  }, [containerWidth]);
 
   // 추가 리뷰 로드 함수
   const loadMoreReviews = useCallback(async () => {
@@ -896,36 +901,8 @@ const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
       className="relative"
       style={{
         minHeight: containerHeight || "100vh",
-        transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : "none",
-        transition: pullDistance === 0 ? "transform 0.3s ease-out" : "none",
       }}
     >
-      {/* Pull-to-refresh 인디케이터 */}
-      {pullDistance > 0 && (
-        <div
-          className="fixed top-16 left-0 right-0 flex items-center justify-center z-50"
-          style={{
-            height: `${Math.min(pullDistance, 100)}px`,
-            opacity: Math.min(pullDistance / 60, 1),
-          }}
-        >
-          {isRefreshing ? (
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 border-2 border-redorange-500 border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-sm text-gray-600">
-                새 리뷰 불러오는 중...
-              </span>
-            </div>
-          ) : pullDistance >= 60 ? (
-            <span className="text-sm text-gray-600">놓으면 새로고침</span>
-          ) : (
-            <span className="text-sm text-gray-500">
-              아래로 당겨서 새로고침
-            </span>
-          )}
-        </div>
-      )}
-
       <div>
         {/* Masonry layout - positioned absolutely */}
         {feedItems.map((item) => (
