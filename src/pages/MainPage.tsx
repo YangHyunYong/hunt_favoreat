@@ -404,7 +404,7 @@ function MapView({
 
         // geolocation은 비동기로 처리하여 지도 표시를 블로킹하지 않음
         if ("geolocation" in navigator) {
-          // 타임아웃 설정 (3초)
+          // 타임아웃 설정 (5초)
           const timeoutId = setTimeout(() => {
             // console.warn("위치 정보 가져오기 타임아웃");
           }, 5000);
@@ -423,6 +423,30 @@ function MapView({
                   markerRef.current.setPosition(newPosition);
                 }
               }
+              // 실제 위치에 대한 geocoding 실행
+              const geocoder = new google.maps.Geocoder();
+              geocoder.geocode(
+                { location: newPosition },
+                (results: any, status: any) => {
+                  if (status === "OK" && results?.[0]) {
+                    const components = results[0].address_components;
+                    let city = "",
+                      town = "";
+                    components.forEach((c: any) => {
+                      if (c.types.includes("country")) {
+                        city = c.long_name;
+                      }
+                      if (
+                        c.types.includes("locality") ||
+                        c.types.includes("sublocality")
+                      ) {
+                        town = c.long_name;
+                      }
+                    });
+                    onLocationResolvedRef.current(city, town);
+                  }
+                }
+              );
               // console.log("현재 위치 가져오기 성공:", newPosition);
             },
             (_e) => {
@@ -1147,7 +1171,7 @@ const MainScreen: React.FC = () => {
       {/* Recent 탭 */}
       {activeTab === "recent" && (
         <div className="pt-[112px] bg-gray-100 min-h-screen">
-          <RecentFeed />
+          <RecentFeed activeTab={activeTab} />
         </div>
       )}
 
@@ -1201,7 +1225,7 @@ const MainScreen: React.FC = () => {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="가게 이름 또는 주소 검색"
-                    className="flex-1 h-full outline-none bg-transparent text-[16px] leading-[20px] placeholder:text-gray-400"
+                    className="flex-1 h-full outline-none bg-transparent text-[14px] leading-[20px] placeholder:text-gray-400"
                   />
                   {!!query && (
                     <button
@@ -1437,6 +1461,7 @@ const MainScreen: React.FC = () => {
       <UserMenu
         isOpen={isUserMenuOpen}
         onClose={() => setIsUserMenuOpen(false)}
+        onTabChange={setActiveTab}
       />
     </div>
   );

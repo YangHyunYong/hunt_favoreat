@@ -840,8 +840,7 @@ export async function getTodayReviewCounts(walletAddresses: string[]): Promise<R
     .select("author_wallet")
     .in("author_wallet", walletAddresses.map(addr => addr.toLowerCase()))
     .gte("created_at", todayUTC.toISOString())
-    .lte("created_at", todayEndUTC.toISOString())
-    .is("deleted_at", null);
+    .lte("created_at", todayEndUTC.toISOString());
   
   if (error) {
     console.error("오늘 작성한 리뷰 개수 조회 실패:", error);

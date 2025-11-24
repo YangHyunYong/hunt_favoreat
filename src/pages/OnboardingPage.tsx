@@ -159,7 +159,7 @@ const OnboardingPage: React.FC = () => {
                 <p className="leading-[20px] text-gray-400">or</p>
                 <div className="leading-[20px] text-gray-600 whitespace-nowrap">
                   <p className="mb-0">
-                    do you want to write great restaurant reviews
+                    Do you want to write great restaurant reviews
                   </p>
                   <p>and climb the leaderboard?</p>
                 </div>

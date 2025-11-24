@@ -852,7 +852,13 @@ const StoreDetailScreen: React.FC = () => {
   };
 
   const handleBack = () => {
-    navigate(-1);
+    // location.state에서 returnTab을 확인하여 해당 탭으로 이동
+    const returnTab = (location.state as { returnTab?: string })?.returnTab;
+    if (returnTab) {
+      navigate("/main", { state: { activeTab: returnTab } });
+    } else {
+      navigate(-1);
+    }
   };
 
   // 거리 포맷팅 함수 (StoreCard.tsx에서 가져옴)

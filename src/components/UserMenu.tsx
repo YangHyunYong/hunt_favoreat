@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAccount, useDisconnect } from "wagmi";
 import { sdk } from "@farcaster/miniapp-sdk";
 import { supabase } from "../supabaseClient";
+import { TabType } from "./Navigator";
 
 interface UserMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  onTabChange?: (tab: TabType) => void;
 }
 
-const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
+const UserMenu: React.FC<UserMenuProps> = ({
+  isOpen,
+  onClose,
+  onTabChange,
+}) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isConnected, address } = useAccount();
   const { disconnect } = useDisconnect();
   const [sdkContext, setSdkContext] = useState<any>(null);
@@ -134,8 +141,13 @@ const UserMenu: React.FC<UserMenuProps> = ({ isOpen, onClose }) => {
   };
 
   const handleLeaderboard = () => {
-    // TODO: 리더보드 화면 구현 시 라우팅
-    console.log("Leaderboard clicked");
+    if (location.pathname === "/main" && onTabChange) {
+      // 이미 /main에 있으면 탭만 변경
+      onTabChange("leaderboard");
+    } else {
+      // 다른 페이지에 있으면 navigate로 이동
+      navigate("/main", { state: { activeTab: "leaderboard" } });
+    }
     onClose();
   };
 

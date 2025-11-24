@@ -161,7 +161,7 @@ const OnboardingSearchResult: React.FC<OnboardingSearchResultProps> = ({
         <div className="bg-white h-[424px] rounded-[16px] p-6 flex flex-col items-center justify-between w-full">
           <div className="flex flex-col gap-2 items-start not-italic relative shrink-0 text-center w-full">
             <p className="text-[14px] font-normal leading-[20px] text-gray-600 w-full whitespace-pre-wrap">
-              {`OMG There's no '${searchQuery}' in Anyang`}
+              {`OMG There's no '${searchQuery}'`}
             </p>
             <div className="text-[16px] font-semibold leading-[24px] text-gray-700 tracking-[0.16px] w-full whitespace-pre-wrap">
               <p className="mb-0">Please search for</p>

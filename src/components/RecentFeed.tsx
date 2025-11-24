@@ -17,7 +17,11 @@ export interface FeedItem {
   placeId?: string;
 }
 
-const RecentFeed: React.FC = () => {
+interface RecentFeedProps {
+  activeTab?: string;
+}
+
+const RecentFeed: React.FC<RecentFeedProps> = ({ activeTab }) => {
   const navigate = useNavigate();
   const [feedItems, setFeedItems] = useState<
     (FeedItem & { left: number; top: number })[]
@@ -30,6 +34,13 @@ const RecentFeed: React.FC = () => {
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const ITEMS_PER_PAGE = 20;
+
+  // Pull-to-refresh 상태
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const touchStartY = useRef<number>(0);
+  const touchCurrentY = useRef<number>(0);
+  const isPulling = useRef<boolean>(false);
 
   // 사용자 이름과 아바타 가져오기
   const getUserInfo = (review: any) => {
@@ -409,11 +420,15 @@ const RecentFeed: React.FC = () => {
     return () => window.removeEventListener("resize", updateContainerWidth);
   }, []);
 
-  // 최신 리뷰 가져오기 (초기 로드)
-  useEffect(() => {
-    const fetchRecentReviews = async () => {
+  // 최신 리뷰 가져오기 함수 (재사용 가능)
+  const fetchRecentReviews = useCallback(
+    async (isRefresh = false) => {
       try {
-        setLoading(true);
+        if (isRefresh) {
+          setIsRefreshing(true);
+        } else {
+          setLoading(true);
+        }
         setOffset(0);
         setHasMore(true);
 
@@ -451,12 +466,68 @@ const RecentFeed: React.FC = () => {
         console.error("최신 리뷰 가져오기 실패:", error);
         setFeedItems([]);
       } finally {
-        setLoading(false);
+        if (isRefresh) {
+          setIsRefreshing(false);
+        } else {
+          setLoading(false);
+        }
+      }
+    },
+    [containerWidth]
+  );
+
+  // 최신 리뷰 가져오기 (초기 로드)
+  useEffect(() => {
+    fetchRecentReviews(false);
+  }, [fetchRecentReviews]);
+
+  // Pull-to-refresh 터치 이벤트 처리
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      // 스크롤이 맨 위에 있을 때만 활성화
+      if (window.scrollY === 0) {
+        touchStartY.current = e.touches[0].clientY;
+        isPulling.current = true;
       }
     };
 
-    fetchRecentReviews();
-  }, []);
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isPulling.current) return;
+
+      touchCurrentY.current = e.touches[0].clientY;
+      const deltaY = touchCurrentY.current - touchStartY.current;
+
+      // 아래로 당기는 경우만 처리
+      if (deltaY > 0 && window.scrollY === 0) {
+        e.preventDefault(); // 스크롤 방지
+        const distance = Math.min(deltaY, 100); // 최대 100px
+        setPullDistance(distance);
+      } else {
+        // 위로 올리거나 스크롤이 있으면 리셋
+        setPullDistance(0);
+        isPulling.current = false;
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (isPulling.current && pullDistance >= 60) {
+        // 60px 이상 당기면 새로고침
+        fetchRecentReviews(true);
+      }
+      setPullDistance(0);
+      isPulling.current = false;
+    };
+
+    window.addEventListener("touchstart", handleTouchStart);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleTouchEnd);
+
+    return () => {
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [pullDistance, fetchRecentReviews]);
 
   // 추가 리뷰 로드 함수
   const loadMoreReviews = useCallback(async () => {
@@ -633,6 +704,7 @@ const RecentFeed: React.FC = () => {
           latitude: placeData.latitude || undefined,
           longitude: placeData.longitude || undefined,
           // distanceMeters는 StoreDetailPage에서 계산
+          returnTab: activeTab || "recent", // 현재 탭 정보 전달
         },
       });
     } catch (error) {
@@ -824,8 +896,36 @@ const RecentFeed: React.FC = () => {
       className="relative"
       style={{
         minHeight: containerHeight || "100vh",
+        transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : "none",
+        transition: pullDistance === 0 ? "transform 0.3s ease-out" : "none",
       }}
     >
+      {/* Pull-to-refresh 인디케이터 */}
+      {pullDistance > 0 && (
+        <div
+          className="fixed top-16 left-0 right-0 flex items-center justify-center z-50"
+          style={{
+            height: `${Math.min(pullDistance, 100)}px`,
+            opacity: Math.min(pullDistance / 60, 1),
+          }}
+        >
+          {isRefreshing ? (
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 border-2 border-redorange-500 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-sm text-gray-600">
+                새 리뷰 불러오는 중...
+              </span>
+            </div>
+          ) : pullDistance >= 60 ? (
+            <span className="text-sm text-gray-600">놓으면 새로고침</span>
+          ) : (
+            <span className="text-sm text-gray-500">
+              아래로 당겨서 새로고침
+            </span>
+          )}
+        </div>
+      )}
+
       <div>
         {/* Masonry layout - positioned absolutely */}
         {feedItems.map((item) => (
