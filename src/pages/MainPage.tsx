@@ -375,12 +375,22 @@ function MapView({
         }
 
         // 기본 위치: 저장된 위치 또는 서울 시청
-        const getDefaultPosition = (): { lat: number; lng: number } => {
+        const getDefaultPosition = (): {
+          lat: number;
+          lng: number;
+          city?: string;
+          town?: string;
+        } => {
           try {
             const saved = localStorage.getItem("lastKnownLocation");
             if (saved) {
               const location = JSON.parse(saved);
-              return { lat: location.lat, lng: location.lng };
+              return {
+                lat: location.lat,
+                lng: location.lng,
+                city: location.city,
+                town: location.town,
+              };
             }
           } catch (error) {
             console.warn("저장된 위치 정보를 불러올 수 없습니다:", error);
@@ -389,6 +399,11 @@ function MapView({
           return { lat: 37.5667467, lng: 126.9780429 };
         };
         let position = getDefaultPosition();
+
+        // 저장된 city/town이 있으면 즉시 표시
+        if (position.city && position.town) {
+          onLocationResolvedRef.current(position.city, position.town);
+        }
 
         console.log("Google Maps 라이브러리 로드 완료");
 
@@ -649,19 +664,6 @@ function MapView({
               lat: pos.coords.latitude,
               lng: pos.coords.longitude,
             };
-            // 성공한 위치를 localStorage에 저장
-            try {
-              localStorage.setItem(
-                "lastKnownLocation",
-                JSON.stringify({
-                  lat: newPosition.lat,
-                  lng: newPosition.lng,
-                  timestamp: Date.now(),
-                })
-              );
-            } catch (error) {
-              console.warn("위치 정보를 저장할 수 없습니다:", error);
-            }
             // 지도와 마커 위치 업데이트
             if (gMapRef.current) {
               gMapRef.current.setCenter(newPosition);
@@ -689,6 +691,21 @@ function MapView({
                       town = c.long_name;
                     }
                   });
+                  // 위치와 city/town을 함께 저장
+                  try {
+                    localStorage.setItem(
+                      "lastKnownLocation",
+                      JSON.stringify({
+                        lat: newPosition.lat,
+                        lng: newPosition.lng,
+                        city: city,
+                        town: town,
+                        timestamp: Date.now(),
+                      })
+                    );
+                  } catch (error) {
+                    console.warn("위치 정보를 저장할 수 없습니다:", error);
+                  }
                   onLocationResolvedRef.current(city, town);
                 }
               }
@@ -790,7 +807,12 @@ const MainScreen: React.FC = () => {
   } | null>(null);
 
   // localStorage에서 마지막 위치 가져오기
-  const getLastKnownLocation = (): { lat: number; lng: number } | null => {
+  const getLastKnownLocation = (): {
+    lat: number;
+    lng: number;
+    city?: string;
+    town?: string;
+  } | null => {
     try {
       const saved = localStorage.getItem("lastKnownLocation");
       if (saved) {
@@ -800,7 +822,12 @@ const MainScreen: React.FC = () => {
         const now = Date.now();
         const oneDay = 24 * 60 * 60 * 1000;
         if (now - savedTime < oneDay) {
-          return { lat: location.lat, lng: location.lng };
+          return {
+            lat: location.lat,
+            lng: location.lng,
+            city: location.city,
+            town: location.town,
+          };
         }
       }
     } catch (error) {
@@ -809,14 +836,20 @@ const MainScreen: React.FC = () => {
     return null;
   };
 
-  // localStorage에 위치 저장
-  const saveLocation = (location: { lat: number; lng: number }) => {
+  // localStorage에 위치 저장 (cityName, townName 포함)
+  const saveLocation = (
+    location: { lat: number; lng: number },
+    city?: string,
+    town?: string
+  ) => {
     try {
       localStorage.setItem(
         "lastKnownLocation",
         JSON.stringify({
           lat: location.lat,
           lng: location.lng,
+          city: city || "",
+          town: town || "",
           timestamp: Date.now(),
         })
       );
@@ -826,7 +859,12 @@ const MainScreen: React.FC = () => {
   };
 
   // 현재 위치 가져오기
-  const getCurrentLocation = (): Promise<{ lat: number; lng: number }> => {
+  const getCurrentLocation = (): Promise<{
+    lat: number;
+    lng: number;
+    city?: string;
+    town?: string;
+  }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
         // geolocation을 지원하지 않으면 저장된 위치 사용
@@ -845,7 +883,7 @@ const MainScreen: React.FC = () => {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           };
-          // 성공한 위치를 저장
+          // 성공한 위치를 저장 (city/town은 geocoding 후 저장)
           saveLocation(location);
           resolve(location);
         },
@@ -863,13 +901,20 @@ const MainScreen: React.FC = () => {
     });
   };
 
-  // 현재 위치 가져오기
+  // 현재 위치 가져오기 및 초기 cityName/townName 복원
   useEffect(() => {
     const fetchCurrentLocation = async () => {
       try {
         const location = await getCurrentLocation();
         setCurrentLocation(location);
         console.log("현재 위치 가져오기 성공:", location);
+
+        // 저장된 cityName과 townName이 있으면 복원
+        if (location.city && location.town) {
+          setCityName(location.city);
+          setTownName(location.town);
+          console.log("저장된 위치 정보 복원:", location.city, location.town);
+        }
       } catch (error) {
         console.error("위치 정보 가져오기 실패:", error);
         // 저장된 위치도 없으면 null로 유지 (기본 위치 설정 안 함)
@@ -1307,6 +1352,16 @@ const MainScreen: React.FC = () => {
           onLocationResolved={(city, town) => {
             setCityName(city);
             setTownName(town);
+            // cityName과 townName도 함께 저장
+            if (currentLocation) {
+              saveLocation(currentLocation, city, town);
+            } else {
+              // currentLocation이 없어도 저장된 위치가 있으면 업데이트
+              const saved = getLastKnownLocation();
+              if (saved) {
+                saveLocation({ lat: saved.lat, lng: saved.lng }, city, town);
+              }
+            }
           }}
           onPlaceSelected={(details) => {
             setSelectedPlace(details); // 프리로드 완료 후 전달됨
