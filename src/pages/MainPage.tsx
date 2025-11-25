@@ -58,6 +58,7 @@ interface MapViewProps {
   onPlaceSelected?: (details: PlaceDetailsResult) => void;
   onMapLocationChanged?: (location: { lat: number; lng: number }) => void;
   userPfpUrl?: string | null;
+  activeTab?: TabType;
 }
 
 interface PlaceDetailsResult {
@@ -252,6 +253,7 @@ function MapView({
   onPlaceSelected,
   onMapLocationChanged,
   userPfpUrl,
+  activeTab,
 }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
 
@@ -372,8 +374,21 @@ function MapView({
           throw new Error("Google Maps API 로드 시간 초과");
         }
 
-        // 기본 위치 (서울 시청)로 먼저 지도 표시 (geolocation 대기하지 않음)
-        let position = { lat: 37.37, lng: 126.9562 };
+        // 기본 위치: 저장된 위치 또는 서울 시청
+        const getDefaultPosition = (): { lat: number; lng: number } => {
+          try {
+            const saved = localStorage.getItem("lastKnownLocation");
+            if (saved) {
+              const location = JSON.parse(saved);
+              return { lat: location.lat, lng: location.lng };
+            }
+          } catch (error) {
+            console.warn("저장된 위치 정보를 불러올 수 없습니다:", error);
+          }
+          // 저장된 위치가 없으면 서울 시청 (최후의 수단)
+          return { lat: 37.5667467, lng: 126.9780429 };
+        };
+        let position = getDefaultPosition();
 
         console.log("Google Maps 라이브러리 로드 완료");
 
@@ -402,16 +417,14 @@ function MapView({
           }
         }
 
-        // geolocation은 비동기로 처리하여 지도 표시를 블로킹하지 않음
-        if ("geolocation" in navigator) {
-          // 타임아웃 설정 (5초)
-          const timeoutId = setTimeout(() => {
-            // console.warn("위치 정보 가져오기 타임아웃");
-          }, 5000);
+        // geolocation 로직을 별도 함수로 추출 (재사용 가능)
+        const requestUserLocation = () => {
+          if (!gMapRef.current || !("geolocation" in navigator)) {
+            return;
+          }
 
           navigator.geolocation.getCurrentPosition(
             (pos) => {
-              clearTimeout(timeoutId);
               const newPosition = {
                 lat: pos.coords.latitude,
                 lng: pos.coords.longitude,
@@ -450,15 +463,17 @@ function MapView({
               // console.log("현재 위치 가져오기 성공:", newPosition);
             },
             (_e) => {
-              clearTimeout(timeoutId);
               // console.warn("위치 정보를 가져오지 못했습니다:", _e);
             },
             {
               timeout: 3000, // 3초 타임아웃
-              maximumAge: 60000, // 1분 이내 캐시된 위치 사용
+              maximumAge: 0, // 캐시 사용 안 함 (항상 최신 위치)
             }
           );
-        }
+        };
+
+        // 초기 geolocation 요청
+        requestUserLocation();
 
         // 마커 초기화: 먼저 기본 마커를 빠르게 표시하고, 커스텀 마커가 준비되면 교체
         const initializeMarker = () => {
@@ -595,30 +610,7 @@ function MapView({
           handlePanToPlaceId as EventListener
         );
 
-        // 주소 -> 도시/동네 정보 콜백
-        const geocoder = new google.maps.Geocoder();
-        geocoder.geocode(
-          { location: position },
-          (results: any, status: any) => {
-            if (status === "OK" && results[0]) {
-              const components = results[0].address_components;
-              let city = "",
-                town = "";
-              components.forEach((c: any) => {
-                if (c.types.includes("country")) {
-                  city = c.long_name;
-                }
-                if (
-                  c.types.includes("locality") ||
-                  c.types.includes("sublocality")
-                ) {
-                  town = c.long_name;
-                }
-              });
-              onLocationResolvedRef.current(city, town);
-            }
-          }
-        );
+        // 기본 위치 geocoding은 제거 (geolocation 성공 시에만 실행)
 
         // 클린업
         return () => {
@@ -641,6 +633,85 @@ function MapView({
       Promise.resolve(cleanup).catch(() => {});
     };
   }, []);
+
+  // activeTab이 "near-me"로 변경될 때마다 geolocation 재요청
+  useEffect(() => {
+    if (activeTab === "near-me" && gMapRef.current) {
+      // 지도가 초기화된 후에만 geolocation 요청
+      const requestUserLocation = () => {
+        if (!gMapRef.current || !("geolocation" in navigator)) {
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const newPosition = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            };
+            // 성공한 위치를 localStorage에 저장
+            try {
+              localStorage.setItem(
+                "lastKnownLocation",
+                JSON.stringify({
+                  lat: newPosition.lat,
+                  lng: newPosition.lng,
+                  timestamp: Date.now(),
+                })
+              );
+            } catch (error) {
+              console.warn("위치 정보를 저장할 수 없습니다:", error);
+            }
+            // 지도와 마커 위치 업데이트
+            if (gMapRef.current) {
+              gMapRef.current.setCenter(newPosition);
+              if (markerRef.current) {
+                markerRef.current.setPosition(newPosition);
+              }
+            }
+            // 실제 위치에 대한 geocoding 실행
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode(
+              { location: newPosition },
+              (results: any, status: any) => {
+                if (status === "OK" && results?.[0]) {
+                  const components = results[0].address_components;
+                  let city = "",
+                    town = "";
+                  components.forEach((c: any) => {
+                    if (c.types.includes("country")) {
+                      city = c.long_name;
+                    }
+                    if (
+                      c.types.includes("locality") ||
+                      c.types.includes("sublocality")
+                    ) {
+                      town = c.long_name;
+                    }
+                  });
+                  onLocationResolvedRef.current(city, town);
+                }
+              }
+            );
+          },
+          (_e) => {
+            // console.warn("위치 정보를 가져오지 못했습니다:", _e);
+          },
+          {
+            timeout: 3000,
+            maximumAge: 0, // 캐시 사용 안 함 (항상 최신 위치)
+          }
+        );
+      };
+
+      // 지도가 준비될 때까지 약간의 지연 후 실행
+      const timer = setTimeout(() => {
+        requestUserLocation();
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
 
   return (
     <div
@@ -718,25 +789,75 @@ const MainScreen: React.FC = () => {
     lng: number;
   } | null>(null);
 
+  // localStorage에서 마지막 위치 가져오기
+  const getLastKnownLocation = (): { lat: number; lng: number } | null => {
+    try {
+      const saved = localStorage.getItem("lastKnownLocation");
+      if (saved) {
+        const location = JSON.parse(saved);
+        // 저장된 위치가 24시간 이내인지 확인
+        const savedTime = location.timestamp || 0;
+        const now = Date.now();
+        const oneDay = 24 * 60 * 60 * 1000;
+        if (now - savedTime < oneDay) {
+          return { lat: location.lat, lng: location.lng };
+        }
+      }
+    } catch (error) {
+      console.warn("저장된 위치 정보를 불러올 수 없습니다:", error);
+    }
+    return null;
+  };
+
+  // localStorage에 위치 저장
+  const saveLocation = (location: { lat: number; lng: number }) => {
+    try {
+      localStorage.setItem(
+        "lastKnownLocation",
+        JSON.stringify({
+          lat: location.lat,
+          lng: location.lng,
+          timestamp: Date.now(),
+        })
+      );
+    } catch (error) {
+      console.warn("위치 정보를 저장할 수 없습니다:", error);
+    }
+  };
+
   // 현재 위치 가져오기
   const getCurrentLocation = (): Promise<{ lat: number; lng: number }> => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error("Geolocation is not supported"));
+        // geolocation을 지원하지 않으면 저장된 위치 사용
+        const lastLocation = getLastKnownLocation();
+        if (lastLocation) {
+          resolve(lastLocation);
+        } else {
+          reject(new Error("Geolocation is not supported"));
+        }
         return;
       }
 
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          resolve({
+          const location = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
-          });
+          };
+          // 성공한 위치를 저장
+          saveLocation(location);
+          resolve(location);
         },
         (error) => {
           console.warn("위치 정보를 가져올 수 없습니다:", error);
-          // 기본값: 서울시청
-          resolve({ lat: 37.37, lng: 126.9562 });
+          // 실패 시 저장된 위치 사용
+          const lastLocation = getLastKnownLocation();
+          if (lastLocation) {
+            resolve(lastLocation);
+          } else {
+            reject(error);
+          }
         }
       );
     });
@@ -751,9 +872,9 @@ const MainScreen: React.FC = () => {
         console.log("현재 위치 가져오기 성공:", location);
       } catch (error) {
         console.error("위치 정보 가져오기 실패:", error);
-        // 기본값으로 서울시청 설정
-        setCurrentLocation({ lat: 37.37, lng: 126.9562 });
-        console.log("기본 위치 설정: 서울시청");
+        // 저장된 위치도 없으면 null로 유지 (기본 위치 설정 안 함)
+        setCurrentLocation(null);
+        console.log("위치 정보를 가져올 수 없습니다.");
       }
     };
 
@@ -1196,6 +1317,7 @@ const MainScreen: React.FC = () => {
             // console.log("지도 위치 변경됨:", location);
           }}
           userPfpUrl={userPfpUrl}
+          activeTab={activeTab}
         />
 
         {/* 상단 */}
@@ -1283,10 +1405,25 @@ const MainScreen: React.FC = () => {
                       state: {
                         cityName,
                         townName,
-                        userLocation: currentLocation || {
-                          lat: 37.37,
-                          lng: 126.9562,
-                        },
+                        userLocation:
+                          currentLocation ||
+                          (() => {
+                            // 저장된 위치 또는 서울 시청
+                            try {
+                              const saved =
+                                localStorage.getItem("lastKnownLocation");
+                              if (saved) {
+                                const location = JSON.parse(saved);
+                                return { lat: location.lat, lng: location.lng };
+                              }
+                            } catch (error) {
+                              console.warn(
+                                "저장된 위치 정보를 불러올 수 없습니다:",
+                                error
+                              );
+                            }
+                            return { lat: 37.5667467, lng: 126.9780429 };
+                          })(),
                       },
                     })
                   }
