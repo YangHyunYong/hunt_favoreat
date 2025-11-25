@@ -1691,7 +1691,7 @@ const StoreDetailScreen: React.FC = () => {
       <ConfirmModal
         open={showImageLimitModal}
         variant="success"
-        message={`최대 ${MAX_IMAGES}장까지만 선택할 수 있습니다. 앞의 ${MAX_IMAGES}장만 선택됩니다.`}
+        message={`You can select up to ${MAX_IMAGES} images.`}
         okText="okay"
         onClose={() => setShowImageLimitModal(false)}
         onConfirm={() => setShowImageLimitModal(false)}
