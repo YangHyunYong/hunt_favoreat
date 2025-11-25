@@ -144,6 +144,8 @@ const StoreDetailScreen: React.FC = () => {
   const [showReviewLimitModal, setShowReviewLimitModal] = useState(false);
   // 로그인 필요 모달 상태
   const [showLoginRequiredModal, setShowLoginRequiredModal] = useState(false);
+  // 이미지 선택 제한 모달 상태
+  const [showImageLimitModal, setShowImageLimitModal] = useState(false);
 
   // 장소 UUID 상태 (한 번만 생성)
   const [placeUuid, setPlaceUuid] = useState<string | null>(null);
@@ -361,7 +363,14 @@ const StoreDetailScreen: React.FC = () => {
   const onPickImages = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+
     const remain = Math.max(0, MAX_IMAGES - reviewImages.length);
+
+    // 2장 이상 선택했을 때 모달 표시 (사진 등록은 막지 않음)
+    if (files.length > remain && remain > 0) {
+      setShowImageLimitModal(true);
+    }
+
     const selected = Array.from(files).slice(0, remain);
 
     // 파일명을 안전한 형태로 변환
@@ -1676,6 +1685,16 @@ const StoreDetailScreen: React.FC = () => {
         okText="okay"
         onClose={() => setShowLoginRequiredModal(false)}
         onConfirm={() => setShowLoginRequiredModal(false)}
+      />
+
+      {/* 이미지 선택 제한 모달 */}
+      <ConfirmModal
+        open={showImageLimitModal}
+        variant="success"
+        message={`최대 ${MAX_IMAGES}장까지만 선택할 수 있습니다. 앞의 ${MAX_IMAGES}장만 선택됩니다.`}
+        okText="okay"
+        onClose={() => setShowImageLimitModal(false)}
+        onConfirm={() => setShowImageLimitModal(false)}
       />
     </div>
   );
