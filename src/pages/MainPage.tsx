@@ -261,9 +261,6 @@ function MapView({
   const gMapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
 
-  // 지도 표시 여부 상태 (초기 접속 시 city/town이 없으면 geocoding 완료 후 표시)
-  const [shouldShowMap, setShouldShowMap] = useState(false);
-
   // 최신 콜백 보존
   const onLocationResolvedRef = useRef(onLocationResolved);
   const onPlaceSelectedRef = useRef(onPlaceSelected);
@@ -403,34 +400,27 @@ function MapView({
         };
         let position = getDefaultPosition();
 
-        // 저장된 city/town이 있으면 즉시 표시하고 지도도 즉시 표시
-        const hasStoredCityTown = position.city && position.town;
-        if (hasStoredCityTown) {
-          onLocationResolvedRef.current(position.city!, position.town!);
-          setShouldShowMap(true); // 저장된 정보가 있으면 즉시 지도 표시
+        // 저장된 city/town이 있으면 즉시 표시
+        if (position.city && position.town) {
+          onLocationResolvedRef.current(position.city, position.town);
         }
 
         console.log("Google Maps 라이브러리 로드 완료");
 
-        // 저장된 city/town이 없으면 지도 초기화를 지연 (geocoding 완료 후)
-        if (!hasStoredCityTown) {
-          // 지도 초기화를 geocoding 완료 후로 지연
-          // requestUserLocation에서 geocoding 완료 후 지도 초기화
-        } else {
-          // 저장된 정보가 있으면 즉시 지도 초기화
-          const gMap = new google.maps.Map(mapDivRef.current as HTMLElement, {
-            center: position,
-            zoom: 18,
-            mapTypeControl: false,
-            fullscreenControl: false,
-            streetViewControl: false,
-            gestureHandling: "greedy", // 모바일: 한 손가락으로 지도 이동, 두 손가락 핀치로만 확대/축소
-            disableDoubleClickZoom: true, // 더블 클릭 확대 비활성화
-            minZoom: 10,
-            maxZoom: 20,
-          });
-          gMapRef.current = gMap;
-        }
+        // 기존 Google Maps API 사용 (비용 절약)
+        // 지도를 먼저 기본 위치로 빠르게 표시
+        const gMap = new google.maps.Map(mapDivRef.current as HTMLElement, {
+          center: position,
+          zoom: 18,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          streetViewControl: false,
+          gestureHandling: "greedy", // 모바일: 한 손가락으로 지도 이동, 두 손가락 핀치로만 확대/축소
+          disableDoubleClickZoom: true, // 더블 클릭 확대 비활성화
+          minZoom: 10,
+          maxZoom: 20,
+        });
+        gMapRef.current = gMap;
 
         // 모바일 제스처 제어: 한 손가락은 팬만, 브라우저 줌 제스처는 막기
         if (mapDivRef.current) {
@@ -444,26 +434,7 @@ function MapView({
 
         // geolocation 로직을 별도 함수로 추출 (재사용 가능)
         const requestUserLocation = () => {
-          if (!("geolocation" in navigator)) {
-            // geolocation을 지원하지 않으면 기본 위치로 지도 초기화
-            if (!gMapRef.current && mapDivRef.current) {
-              const gMap = new google.maps.Map(
-                mapDivRef.current as HTMLElement,
-                {
-                  center: position,
-                  zoom: 18,
-                  mapTypeControl: false,
-                  fullscreenControl: false,
-                  streetViewControl: false,
-                  gestureHandling: "greedy",
-                  disableDoubleClickZoom: true,
-                  minZoom: 10,
-                  maxZoom: 20,
-                }
-              );
-              gMapRef.current = gMap;
-              setShouldShowMap(true);
-            }
+          if (!gMapRef.current || !("geolocation" in navigator)) {
             return;
           }
 
@@ -473,10 +444,13 @@ function MapView({
                 lat: pos.coords.latitude,
                 lng: pos.coords.longitude,
               };
-
-              // 저장된 city/town이 없으면 지도 초기화를 geocoding 완료 후로 지연
-              const shouldDelayMapInit = !hasStoredCityTown;
-
+              // 지도와 마커 위치 업데이트
+              if (gMapRef.current) {
+                gMapRef.current.setCenter(newPosition);
+                if (markerRef.current) {
+                  markerRef.current.setPosition(newPosition);
+                }
+              }
               // 실제 위치에 대한 geocoding 실행
               const geocoder = new google.maps.Geocoder();
               geocoder.geocode(
@@ -497,119 +471,13 @@ function MapView({
                         town = c.long_name;
                       }
                     });
-
-                    // geocoding 완료 후 city/town 설정
                     onLocationResolvedRef.current(city, town);
-
-                    // 저장된 city/town이 없었으면 이제 지도 초기화
-                    if (
-                      shouldDelayMapInit &&
-                      !gMapRef.current &&
-                      mapDivRef.current
-                    ) {
-                      const gMap = new google.maps.Map(
-                        mapDivRef.current as HTMLElement,
-                        {
-                          center: newPosition,
-                          zoom: 18,
-                          mapTypeControl: false,
-                          fullscreenControl: false,
-                          streetViewControl: false,
-                          gestureHandling: "greedy",
-                          disableDoubleClickZoom: true,
-                          minZoom: 10,
-                          maxZoom: 20,
-                        }
-                      );
-                      gMapRef.current = gMap;
-
-                      // 마커 초기화
-                      markerRef.current = new google.maps.Marker({
-                        map: gMap,
-                        position: newPosition,
-                        title: "현재 위치",
-                      });
-
-                      // 커스텀 마커 아이콘 생성
-                      const currentPfpUrl = userPfpUrlRef.current;
-                      if (currentPfpUrl !== undefined) {
-                        createCustomMarkerIcon(currentPfpUrl || null)
-                          .then((iconUrl) => {
-                            if (markerRef.current) {
-                              const markerIcon = {
-                                url: iconUrl,
-                                scaledSize: new google.maps.Size(48, 48),
-                                size: new google.maps.Size(48, 48),
-                                anchor: new google.maps.Point(24, 48),
-                              };
-                              markerRef.current.setIcon(markerIcon);
-                            }
-                          })
-                          .catch((_error) => {
-                            // 실패해도 기본 마커는 이미 표시되어 있음
-                          });
-                      }
-
-                      // 지도 클릭 리스너 추가
-                      gMap.addListener("click", async (e: any) => {
-                        if (!e.placeId) return;
-                        e.stop();
-
-                        const reqId = ++latestReqId.current;
-                        try {
-                          const details = await fetchPlaceDetails(e.placeId);
-
-                          // 먼저 프리로드
-                          if (details.photos?.length) {
-                            await preloadImages(details.photos);
-                          }
-
-                          // 최신 클릭이 아니면 무시 (레이스 컨디션 방지)
-                          if (reqId !== latestReqId.current) return;
-
-                          // 마커 위치 이동 (지도 중심은 유지)
-                          markerRef.current?.setPosition(e.latLng);
-
-                          // 부모로 전달 (이미지 캐시에 올라간 상태)
-                          onPlaceSelectedRef.current?.(details);
-                        } catch (err) {
-                          console.error(err);
-                        }
-                      });
-
-                      setShouldShowMap(true); // 지도 표시
-                    } else if (gMapRef.current) {
-                      // 이미 지도가 초기화되어 있으면 위치만 업데이트
-                      gMapRef.current.setCenter(newPosition);
-                      if (markerRef.current) {
-                        markerRef.current.setPosition(newPosition);
-                      }
-                    }
                   }
                 }
               );
               // console.log("현재 위치 가져오기 성공:", newPosition);
             },
             (_e) => {
-              // geolocation 실패 시에도 지도 초기화 (기본 위치로)
-              if (!gMapRef.current && mapDivRef.current) {
-                const gMap = new google.maps.Map(
-                  mapDivRef.current as HTMLElement,
-                  {
-                    center: position,
-                    zoom: 18,
-                    mapTypeControl: false,
-                    fullscreenControl: false,
-                    streetViewControl: false,
-                    gestureHandling: "greedy",
-                    disableDoubleClickZoom: true,
-                    minZoom: 10,
-                    maxZoom: 20,
-                  }
-                );
-                gMapRef.current = gMap;
-                setShouldShowMap(true);
-              }
               // console.warn("위치 정보를 가져오지 못했습니다:", _e);
             },
             {
@@ -622,13 +490,11 @@ function MapView({
         // 초기 geolocation 요청
         requestUserLocation();
 
-        // 마커 초기화: 저장된 city/town이 있을 때만 실행 (지도가 이미 초기화된 경우)
+        // 마커 초기화: 먼저 기본 마커를 빠르게 표시하고, 커스텀 마커가 준비되면 교체
         const initializeMarker = () => {
-          if (!gMapRef.current) return; // 지도가 아직 초기화되지 않았으면 스킵
-
           // 1. 먼저 기본 마커를 빠르게 생성 (지도 표시 지연 방지)
           markerRef.current = new google.maps.Marker({
-            map: gMapRef.current,
+            map: gMap,
             position,
             title: "현재 위치",
           });
@@ -655,37 +521,34 @@ function MapView({
           }
         };
 
-        // 저장된 city/town이 있을 때만 마커 초기화 및 지도 클릭 리스너 추가
-        if (hasStoredCityTown && gMapRef.current) {
-          initializeMarker();
+        initializeMarker();
 
-          // 지도 클릭: 마커만 이동(지도 중심은 그대로 유지), 상세 조회 + 이미지 프리로드 후 부모 콜백
-          gMapRef.current.addListener("click", async (e: any) => {
-            if (!e.placeId) return;
-            e.stop();
+        // 지도 클릭: 마커만 이동(지도 중심은 그대로 유지), 상세 조회 + 이미지 프리로드 후 부모 콜백
+        gMap.addListener("click", async (e: any) => {
+          if (!e.placeId) return;
+          e.stop();
 
-            const reqId = ++latestReqId.current;
-            try {
-              const details = await fetchPlaceDetails(e.placeId);
+          const reqId = ++latestReqId.current;
+          try {
+            const details = await fetchPlaceDetails(e.placeId);
 
-              // 먼저 프리로드
-              if (details.photos?.length) {
-                await preloadImages(details.photos);
-              }
-
-              // 최신 클릭이 아니면 무시 (레이스 컨디션 방지)
-              if (reqId !== latestReqId.current) return;
-
-              // 마커 위치 이동 (지도 중심은 유지)
-              markerRef.current?.setPosition(e.latLng);
-
-              // 부모로 전달 (이미지 캐시에 올라간 상태)
-              onPlaceSelectedRef.current?.(details);
-            } catch (err) {
-              console.error(err);
+            // 먼저 프리로드
+            if (details.photos?.length) {
+              await preloadImages(details.photos);
             }
-          });
-        }
+
+            // 최신 클릭이 아니면 무시 (레이스 컨디션 방지)
+            if (reqId !== latestReqId.current) return;
+
+            // 마커 위치 이동 (지도 중심은 유지)
+            markerRef.current?.setPosition(e.latLng);
+
+            // 부모로 전달 (이미지 캐시에 올라간 상태)
+            onPlaceSelectedRef.current?.(details);
+          } catch (err) {
+            console.error(err);
+          }
+        });
 
         // 🔸 검색 선택(메인에서 발생) → 지도 이동을 위한 커스텀 이벤트 리스너
         const handlePanToPlaceId = async (evt: Event) => {
@@ -870,9 +733,7 @@ function MapView({
   return (
     <div
       ref={mapDivRef}
-      className={`w-full h-[calc(100svh-3rem)] md:h-[calc(100vh-3rem)] relative ${
-        shouldShowMap ? "" : "hidden"
-      }`}
+      className="w-full h-[calc(100svh-3rem)] md:h-[calc(100vh-3rem)] relative"
     />
   );
 }
