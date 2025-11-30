@@ -1099,7 +1099,7 @@ const MainScreen: React.FC = () => {
     const updateContentHeight = () => {
       if (contentRef.current) {
         const height = contentRef.current.offsetHeight;
-        setContentHeight(height + 20); // 하단 20px 추가
+        setContentHeight(height + 24); // 하단 20px 추가
       }
     };
 
@@ -1607,10 +1607,15 @@ const MainScreen: React.FC = () => {
                   new CustomEvent("fe:requestCurrentLocation")
                 );
               }}
-              className="absolute bottom-4 right-4 z-10 rounded-full pointer-events-auto"
+              className="absolute bottom-5 right-4 z-10 rounded-full pointer-events-auto"
               title="현재 위치로 이동"
             >
-              <img src="/icons/gps.svg" className="w-10 h-10" alt="GPS" />
+              <img
+                src="/icons/gps.svg"
+                className="w-10 h-10"
+                alt="GPS"
+                style={{ imageRendering: "crisp-edges" }}
+              />
             </button>
           )}
         </div>
@@ -1846,10 +1851,15 @@ const MainScreen: React.FC = () => {
                       new CustomEvent("fe:requestCurrentLocation")
                     );
                   }}
-                  className="absolute bottom-4 right-4 z-10 rounded-full"
+                  className="absolute bottom-5 right-4 z-10 rounded-full"
                   title="현재 위치로 이동"
                 >
-                  <img src="/icons/gps.svg" className="w-10 h-10" alt="GPS" />
+                  <img
+                    src="/icons/gps.svg"
+                    className="w-10 h-10"
+                    alt="GPS"
+                    style={{ imageRendering: "crisp-edges" }}
+                  />
                 </button>
               ) : (
                 // showContent가 true이면 항상 전체 콘텐츠 렌더링 (높이만 조정)
@@ -1863,7 +1873,12 @@ const MainScreen: React.FC = () => {
                     className="absolute mt-[-70px] right-4 z-10 rounded-full"
                     title="현재 위치로 이동"
                   >
-                    <img src="/icons/gps.svg" className="w-10 h-10" alt="GPS" />
+                    <img
+                      src="/icons/gps.svg"
+                      className="w-10 h-10"
+                      alt="GPS"
+                      style={{ imageRendering: "crisp-edges" }}
+                    />
                   </button>
                   <div ref={contentRef} className="p-5 pb-[20px]">
                     <div className="flex items-center justify-between mb-4">
