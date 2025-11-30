@@ -955,7 +955,7 @@ const StoreDetailScreen: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white pt-16">
+    <div className="min-h-screen bg-white pt-16 flex flex-col">
       <Header
         leftElement={
           <button
@@ -1212,7 +1212,7 @@ const StoreDetailScreen: React.FC = () => {
           <p className="text-location-content">리뷰를 불러오는 중...</p>
         </div>
       ) : reviews.length > 0 ? (
-        <div className="divide-y">
+        <div className="divide-y mb-2">
           {reviews.map((review) => (
             <div key={review.id} className="px-5 py-5">
               <div className="flex items-center justify-between mb-4 relative">
@@ -1631,7 +1631,7 @@ const StoreDetailScreen: React.FC = () => {
           ))}
         </div>
       ) : (
-        <div className="flex flex-col justify-start pt-[18px] pb-8 text-center bg-gray-200 text-gray-600 min-h-[160px]">
+        <div className="flex flex-col justify-start pt-[18px] pb-8 text-center bg-gray-200 text-gray-600 flex-1">
           <p className="text-location-content mb-1">no review yet</p>
           <p className="text-location-content-700">Be the first reviewer</p>
           <p className="text-location-content-700">
