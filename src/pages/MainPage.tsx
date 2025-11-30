@@ -413,6 +413,7 @@ function MapView({
         const gMap = new google.maps.Map(mapDivRef.current as HTMLElement, {
           center: position,
           zoom: 18,
+          disableDefaultUI: true,
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
@@ -798,12 +799,7 @@ function MapView({
     }
   }, [activeTab]);
 
-  return (
-    <div
-      ref={mapDivRef}
-      className="w-full h-[calc(100svh-3rem)] md:h-[calc(100vh-3rem)] relative"
-    />
-  );
+  return <div ref={mapDivRef} className="w-full h-full relative" />;
 }
 
 const MainScreen: React.FC = () => {
@@ -1547,13 +1543,13 @@ const MainScreen: React.FC = () => {
 
       {/* Near me 탭 (지도) - 항상 마운트하여 재로딩 방지 */}
       <div
-        className={`h-screen overflow-visible bg-white flex flex-col font-sans relative pt-28 ${
+        className={`h-screen overflow-hidden bg-white flex flex-col font-sans relative pt-28 ${
           activeTab !== "near-me" ? "hidden" : ""
         }`}
       >
         {/* 지도 영역 */}
         <div
-          className="w-full h-full relative"
+          className="w-full h-[calc(100vh-7rem)] relative overflow-hidden"
           onClick={(e) => {
             // bottom sheet 외부(지도) 클릭 시 가게 이름만 보이는 높이로
             if (
@@ -1605,12 +1601,13 @@ const MainScreen: React.FC = () => {
           {/* GPS 플로팅 버튼 (bottom sheet가 없을 때만 표시) */}
           {(!selectedPlace || sheetHeight === "closed") && (
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 window.dispatchEvent(
                   new CustomEvent("fe:requestCurrentLocation")
                 );
               }}
-              className="absolute bottom-4 right-4 z-10 rounded-full"
+              className="absolute bottom-4 right-4 z-10 rounded-full pointer-events-auto"
               title="현재 위치로 이동"
             >
               <img src="/icons/gps.svg" className="w-10 h-10" alt="GPS" />
@@ -1623,7 +1620,7 @@ const MainScreen: React.FC = () => {
           {/* 1줄: City / Town 라벨 (항상 표시) */}
           <div className="pointer-events-auto">
             <div className="text-title-600 text-gray-800 inline-block px-2 py-1 rounded-lg">
-              {cityName}
+              ""
             </div>
           </div>
 
