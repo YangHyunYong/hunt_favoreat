@@ -780,6 +780,104 @@ export async function getLeaderboard() {
   return data || [];
 }
 
+// Weekly 리더보드 데이터 가져오기 (UTC 기준 월요일~일요일 포인트 계산)
+export async function getWeeklyLeaderboard() {
+  try {
+    // UTC 기준 현재 날짜
+    const now = new Date();
+    const currentUTCDay = now.getUTCDay(); // 0=일요일, 1=월요일, ..., 6=토요일
+    
+    // 현재 날짜가 포함된 주의 월요일 계산
+    // 일요일(0)인 경우 -6일, 그 외에는 (currentUTCDay - 1)일을 빼면 월요일이 됨
+    const daysToMonday = currentUTCDay === 0 ? -6 : -(currentUTCDay - 1);
+    const mondayDate = new Date(now);
+    mondayDate.setUTCDate(now.getUTCDate() + daysToMonday);
+    mondayDate.setUTCHours(0, 0, 0, 0);
+    
+    // 일요일 계산 (월요일 + 6일)
+    const sundayDate = new Date(mondayDate);
+    sundayDate.setUTCDate(mondayDate.getUTCDate() + 6);
+    sundayDate.setUTCHours(23, 59, 59, 999);
+    
+    const weekStart = mondayDate.toISOString();
+    const weekEnd = sundayDate.toISOString();
+    
+    // 해당 주의 포인트 로그 가져오기
+    const { data: pointLogs, error: logsError } = await supabase
+      .from("point_logs")
+      .select("user_wallet, points")
+      .gte("created_at", weekStart)
+      .lte("created_at", weekEnd);
+    
+    if (logsError) {
+      console.error("주간 포인트 로그 조회 실패:", logsError);
+      throw logsError;
+    }
+    
+    // 지갑 주소별로 포인트 합계 계산
+    const weeklyPointsMap: Record<string, number> = {};
+    pointLogs?.forEach((log) => {
+      const wallet = log.user_wallet.toLowerCase();
+      weeklyPointsMap[wallet] = (weeklyPointsMap[wallet] || 0) + (log.points || 0);
+    });
+    
+    // 주간에 updated_at이 있는 사용자들 가져오기 (포인트가 0이어도 포함)
+    const { data: activeUsers, error: activeUsersError } = await supabase
+      .from("users")
+      .select("wallet_address, user_name, user_pfp_url")
+      .gte("updated_at", weekStart)
+      .lte("updated_at", weekEnd);
+    
+    if (activeUsersError) {
+      console.error("주간 활동 사용자 조회 실패:", activeUsersError);
+      throw activeUsersError;
+    }
+    
+    // 포인트 로그가 있는 사용자들의 지갑 주소
+    const pointLogWallets = new Set(Object.keys(weeklyPointsMap).map(w => w.toLowerCase()));
+    
+    // 주간에 활동한 모든 사용자들의 지갑 주소 (중복 제거)
+    const allActiveWallets = new Set<string>();
+    activeUsers?.forEach((user) => {
+      allActiveWallets.add(user.wallet_address.toLowerCase());
+    });
+    pointLogWallets.forEach((wallet) => {
+      allActiveWallets.add(wallet);
+    });
+    
+    if (allActiveWallets.size === 0) {
+      return [];
+    }
+    
+    // 모든 활동 사용자 정보 가져오기
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("wallet_address, user_name, user_pfp_url")
+      .in("wallet_address", Array.from(allActiveWallets));
+    
+    if (usersError) {
+      console.error("사용자 정보 조회 실패:", usersError);
+      throw usersError;
+    }
+    
+    // 주간 포인트와 사용자 정보 결합 (포인트가 0이어도 포함)
+    const leaderboardData = (users || []).map((user) => ({
+      wallet_address: user.wallet_address,
+      user_name: user.user_name,
+      user_pfp_url: user.user_pfp_url,
+      points: weeklyPointsMap[user.wallet_address.toLowerCase()] || 0,
+    }));
+    
+    // 포인트 내림차순 정렬
+    leaderboardData.sort((a, b) => b.points - a.points);
+    
+    return leaderboardData;
+  } catch (error) {
+    console.error("주간 리더보드 데이터 조회 실패:", error);
+    throw error;
+  }
+}
+
 // UTC 기준 오늘 작성한 리뷰 개수 가져오기 (최대 5개)
 export async function getTodayReviewCount(walletAddress: string): Promise<number> {
   // UTC 기준 오늘 00:00:00

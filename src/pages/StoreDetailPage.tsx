@@ -94,7 +94,11 @@ const StoreDetailScreen: React.FC = () => {
 
   // 기본 데이터 설정 (state 없을 경우 대비)
   const displayName = place.displayName || id || "Unknown Store";
-  const heroImage = place.photos?.[0] || "/sample/burger-hero.jpg";
+
+  // 히어로 이미지 계산: place.photos > 최신 리뷰 이미지 > 없음
+  const [heroImage, setHeroImage] = useState<string | undefined>(
+    place.photos?.[0] || undefined
+  );
 
   // 리뷰 통계 상태
   const [placeReviewStats, setPlaceReviewStats] = useState<{
@@ -238,6 +242,13 @@ const StoreDetailScreen: React.FC = () => {
     place.longitude,
     placeUuid,
   ]);
+
+  // place.photos가 변경되면 히어로 이미지 업데이트
+  useEffect(() => {
+    if (place.photos?.[0]) {
+      setHeroImage(place.photos[0]);
+    }
+  }, [place.photos]);
 
   // placeUuid가 준비되면 리뷰 로드
   useEffect(() => {
@@ -542,6 +553,28 @@ const StoreDetailScreen: React.FC = () => {
 
       setReviews(reviewsData);
       setCurrentPlaceId(placeId);
+
+      // 히어로 이미지가 없고 리뷰가 있으면, 가장 최신 리뷰의 첫 번째 이미지 사용
+      setHeroImage((currentHeroImage) => {
+        // 이미 place.photos가 있으면 그대로 유지
+        if (place.photos?.[0]) {
+          return place.photos[0];
+        }
+        // place.photos가 없고 리뷰가 있으면 최신 리뷰의 첫 번째 이미지 사용
+        if (!currentHeroImage && reviewsData.length > 0) {
+          const latestReview = reviewsData[0];
+          if (latestReview.photos && latestReview.photos.length > 0) {
+            const firstPhoto = latestReview.photos[0];
+            const imageUrl =
+              typeof firstPhoto === "string" ? firstPhoto : firstPhoto.url;
+            if (imageUrl) {
+              return imageUrl;
+            }
+          }
+        }
+        // 그 외에는 현재 값 유지
+        return currentHeroImage;
+      });
     } catch (error) {
       console.error("❌ Failed to load reviews:", error);
       setReviews([]);
@@ -834,6 +867,29 @@ const StoreDetailScreen: React.FC = () => {
 
       // 새 리뷰를 맨 앞에 추가
       setReviews((prev) => [newReview, ...prev]);
+
+      // 히어로 이미지가 없고 새 리뷰에 이미지가 있으면 히어로 이미지 업데이트
+      setHeroImage((currentHeroImage) => {
+        // 이미 place.photos가 있으면 그대로 유지
+        if (place.photos?.[0]) {
+          return place.photos[0];
+        }
+        // place.photos가 없고 현재 히어로 이미지도 없고 새 리뷰에 이미지가 있으면 사용
+        if (
+          !currentHeroImage &&
+          newReview.photos &&
+          newReview.photos.length > 0
+        ) {
+          const firstPhoto = newReview.photos[0];
+          const imageUrl =
+            typeof firstPhoto === "string" ? firstPhoto : firstPhoto.url;
+          if (imageUrl) {
+            return imageUrl;
+          }
+        }
+        // 그 외에는 현재 값 유지
+        return currentHeroImage;
+      });
 
       // 4. 리뷰 통계 갱신
       if (placeUuid) {
@@ -1296,10 +1352,13 @@ const StoreDetailScreen: React.FC = () => {
                               ? {
                                   embeds:
                                     reviewImageUrls.length === 1
-                                      ? [reviewImageUrls[0]]
+                                      ? [
+                                          reviewImageUrls[0],
+                                          "https://farcaster.xyz/miniapps/D1uOkGuytCFh/favoreat",
+                                        ]
                                       : [
                                           reviewImageUrls[0],
-                                          reviewImageUrls[1],
+                                          "https://farcaster.xyz/miniapps/D1uOkGuytCFh/favoreat",
                                         ],
                                 }
                               : {}),

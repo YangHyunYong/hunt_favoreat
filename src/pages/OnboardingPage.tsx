@@ -15,6 +15,8 @@ interface SearchResult {
   };
 }
 
+const ONBOARDING_COMPLETED_KEY = "favoreat_onboarding_completed";
+
 const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
   const [showSearch, setShowSearch] = useState(false);
@@ -22,6 +24,15 @@ const OnboardingPage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // 첫 방문 여부 체크
+  useEffect(() => {
+    const onboardingCompleted = localStorage.getItem(ONBOARDING_COMPLETED_KEY);
+    if (onboardingCompleted === "true") {
+      // 이미 온보딩을 완료한 경우 메인 페이지로 리다이렉트
+      navigate("/main", { state: { activeTab: "recent" } });
+    }
+  }, [navigate]);
 
   // Google Maps API 로드 (검색 기능을 위해 필요)
   useEffect(() => {
@@ -88,8 +99,10 @@ const OnboardingPage: React.FC = () => {
     });
   }, []);
 
-  const handleFindNearby = () => {
-    navigate("/main", { state: { activeTab: "near-me" } });
+  const handleSeeReviews = () => {
+    // 온보딩 완료 표시
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
+    navigate("/main", { state: { activeTab: "recent" } });
   };
 
   const handleWriteReviews = () => {
@@ -113,6 +126,8 @@ const OnboardingPage: React.FC = () => {
   };
 
   const handlePlaceSelect = (_placeId: string) => {
+    // 온보딩 완료 표시
+    localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
     // TODO: Handle place selection
     // console.log("Place selected:", _placeId);
   };
@@ -167,11 +182,11 @@ const OnboardingPage: React.FC = () => {
 
               <div className="flex flex-col gap-2 items-start w-full">
                 <button
-                  onClick={handleFindNearby}
+                  onClick={handleSeeReviews}
                   className="bg-gray-900 flex gap-1 items-center justify-center px-4 py-3 rounded-[16px] w-full"
                 >
                   <p className="text-[16px] font-bold leading-[24px] text-gray-50 tracking-[0.16px]">
-                    Find nearby
+                    See reviews
                   </p>
                 </button>
                 <button

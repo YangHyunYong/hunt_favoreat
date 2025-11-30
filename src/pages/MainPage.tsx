@@ -13,6 +13,7 @@ import {
   getMyBookmarks,
   ensurePlaceExists,
   getPlaceReviewStats,
+  getReviewsWithImages,
 } from "../supabaseClient";
 import RecentFeed from "../components/RecentFeed";
 import Leaderboard from "../components/Leaderboard";
@@ -625,6 +626,69 @@ function MapView({
           handlePanToPlaceId as EventListener
         );
 
+        // 현재 위치로 이동 이벤트 리스너
+        const handleRequestCurrentLocation = () => {
+          if (!gMapRef.current || !("geolocation" in navigator)) {
+            return;
+          }
+
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const newPosition = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+              // 지도와 마커 위치 업데이트
+              if (gMapRef.current) {
+                gMapRef.current.setCenter(newPosition);
+                gMapRef.current.setZoom(18);
+                if (markerRef.current) {
+                  markerRef.current.setPosition(newPosition);
+                }
+              }
+              // 지도 위치 변경 콜백 호출
+              onMapLocationChangedRef.current?.(newPosition);
+
+              // 역지오코딩으로 City/Town 갱신
+              const geocoder = new google.maps.Geocoder();
+              geocoder.geocode(
+                { location: newPosition },
+                (results: any, status: any) => {
+                  if (status === "OK" && results?.[0]) {
+                    const components = results[0].address_components;
+                    let city = "",
+                      town = "";
+                    components.forEach((c: any) => {
+                      if (c.types.includes("country")) {
+                        city = c.long_name;
+                      }
+                      if (
+                        c.types.includes("locality") ||
+                        c.types.includes("sublocality")
+                      ) {
+                        town = c.long_name;
+                      }
+                    });
+                    onLocationResolvedRef.current(city, town);
+                  }
+                }
+              );
+            },
+            (_e) => {
+              console.warn("위치 정보를 가져오지 못했습니다:", _e);
+            },
+            {
+              timeout: 3000,
+              maximumAge: 0,
+            }
+          );
+        };
+
+        window.addEventListener(
+          "fe:requestCurrentLocation",
+          handleRequestCurrentLocation as EventListener
+        );
+
         // 기본 위치 geocoding은 제거 (geolocation 성공 시에만 실행)
 
         // 클린업
@@ -632,6 +696,10 @@ function MapView({
           window.removeEventListener(
             "fe:panToPlaceId",
             handlePanToPlaceId as EventListener
+          );
+          window.removeEventListener(
+            "fe:requestCurrentLocation",
+            handleRequestCurrentLocation as EventListener
           );
         };
       } catch (error) {
@@ -755,6 +823,7 @@ const MainScreen: React.FC = () => {
     count: number;
     averageRating: number;
   } | null>(null);
+  const [reviewImages, setReviewImages] = useState<string[]>([]); // 리뷰에서 가져온 이미지들
 
   // 🔹 Map/Grid 활성 상태 관리
   const [viewMode, setViewMode] = useState<"map" | "grid">("map");
@@ -774,10 +843,14 @@ const MainScreen: React.FC = () => {
     setShowContent(false);
     // placeReviewStats 초기화
     setPlaceReviewStats(null);
-    // bottom sheet를 최소 높이로 스냅
+    // reviewImages 초기화
+    setReviewImages([]);
+    // sheetHeight 초기화
+    setSheetHeight("closed");
+    // bottom sheet를 높이 0으로 스냅
     if (sheetRef.current?.snapTo) {
       try {
-        sheetRef.current.snapTo(0); // 첫 번째 snap point (최소 높이)
+        sheetRef.current.snapTo(0); // 높이 0
       } catch (error) {
         console.warn("Bottom sheet 초기화 실패:", error);
       }
@@ -788,6 +861,41 @@ const MainScreen: React.FC = () => {
   const sheetHostRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<any>(null);
   const [showContent, setShowContent] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState<"closed" | "title" | "full">(
+    "closed"
+  );
+  const contentRef = useRef<HTMLDivElement | null>(null); // 콘텐츠 영역 ref
+  const [contentHeight, setContentHeight] = useState(0); // 콘텐츠 실제 높이
+
+  // Bottom sheet 높이 변화 감지 (끌어올릴 때 full로 변경)
+  useEffect(() => {
+    if (!sheetHostRef.current || !selectedPlace) return;
+
+    const container = sheetHostRef.current.querySelector(
+      ".rsbs-container"
+    ) as HTMLElement;
+    if (!container) return;
+
+    const ro = new ResizeObserver(() => {
+      if (!selectedPlace || sheetHeight === "closed") return;
+
+      const currentHeight = container.offsetHeight;
+      const titleHeight = 96;
+      const fullHeight = window.innerHeight * 0.46;
+
+      // title 상태에서 full 높이 이상으로 끌어올리면 full로 변경
+      if (sheetHeight === "title" && currentHeight >= fullHeight * 0.8) {
+        setSheetHeight("full");
+      }
+      // full 상태에서 title 높이 이하로 내리면 title로 변경
+      else if (sheetHeight === "full" && currentHeight <= titleHeight * 1.2) {
+        setSheetHeight("title");
+      }
+    });
+
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [selectedPlace, sheetHeight]);
 
   // ✅ 검색 상태 (추가)
   const [searchOpen, setSearchOpen] = useState(false);
@@ -985,17 +1093,55 @@ const MainScreen: React.FC = () => {
     setIsBookmarked(false);
   }, [address]);
 
-  // 장소 선택 시: 콘텐츠 표시 + 중간 스냅(0.46 높이)
+  // 콘텐츠 높이 측정
   useEffect(() => {
-    if (!selectedPlace) return;
+    if (!contentRef.current || !showContent) {
+      setContentHeight(0);
+      return;
+    }
 
+    const updateContentHeight = () => {
+      if (contentRef.current) {
+        const height = contentRef.current.offsetHeight;
+        setContentHeight(height + 20); // 하단 20px 추가
+      }
+    };
+
+    // 초기 측정 (약간의 지연을 두어 렌더링 완료 후 측정)
+    const timer = setTimeout(() => {
+      updateContentHeight();
+    }, 0);
+
+    // ResizeObserver로 높이 변화 감지
+    const ro = new ResizeObserver(() => {
+      updateContentHeight();
+    });
+
+    ro.observe(contentRef.current);
+
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
+  }, [showContent, selectedPlace, placeReviewStats, reviewImages]);
+
+  // 장소 선택 시: 콘텐츠 표시 + 콘텐츠 높이에 맞춰 스냅
+  useEffect(() => {
+    if (!selectedPlace) {
+      setSheetHeight("closed");
+      setShowContent(false);
+      return;
+    }
+
+    // selectedPlace가 선택되면 항상 showContent를 true로 설정 (데이터 유지)
     setShowContent(true);
+    setSheetHeight("full"); // 핀 클릭 시 전체 정보 표시
 
-    const snapMiddle = () => {
-      const targetPx = Math.round(window.innerHeight * 0.46);
-      if (sheetRef.current?.snapTo) {
+    // 콘텐츠 높이가 측정된 후 스냅
+    const snapToContent = () => {
+      if (contentHeight > 0 && sheetRef.current?.snapTo) {
         try {
-          sheetRef.current.snapTo(targetPx); // px 우선
+          sheetRef.current.snapTo(contentHeight);
         } catch {
           try {
             sheetRef.current.snapTo(1); // index 폴백
@@ -1004,8 +1150,11 @@ const MainScreen: React.FC = () => {
       }
     };
 
-    requestAnimationFrame(() => setTimeout(snapMiddle, 0));
-  }, [selectedPlace]);
+    // 콘텐츠 높이가 측정될 때까지 대기
+    if (contentHeight > 0) {
+      requestAnimationFrame(() => setTimeout(snapToContent, 0));
+    }
+  }, [selectedPlace, contentHeight]);
 
   // 선택된 장소의 북마크 상태 확인 및 리뷰 통계 조회
   useEffect(() => {
@@ -1057,8 +1206,39 @@ const MainScreen: React.FC = () => {
       }
     };
 
+    // 리뷰 이미지 가져오기
+    const fetchReviewImages = async () => {
+      try {
+        const placeId = selectedPlace.placeId!;
+        // placeId를 UUID로 변환
+        const uuidPlaceId = await placeIdToUUID(placeId);
+        // 리뷰 가져오기 (최대 10개)
+        const reviews = await getReviewsWithImages(uuidPlaceId, undefined, 10);
+
+        // 모든 리뷰에서 이미지 추출 (최대 2개)
+        const images: string[] = [];
+        for (const review of reviews) {
+          if (images.length >= 2) break;
+          if (review.photos && review.photos.length > 0) {
+            for (const photo of review.photos) {
+              if (images.length >= 2) break;
+              const imageUrl = typeof photo === "string" ? photo : photo.url;
+              if (imageUrl) {
+                images.push(imageUrl);
+              }
+            }
+          }
+        }
+        setReviewImages(images);
+      } catch (error) {
+        console.error("리뷰 이미지 조회 실패:", error);
+        setReviewImages([]);
+      }
+    };
+
     checkBookmarkStatus();
     fetchReviewStats();
+    fetchReviewImages();
   }, [selectedPlace, address]);
 
   // 별점 UI (가득/빈 별 표현, 0.5점 단위 지원)
@@ -1113,6 +1293,8 @@ const MainScreen: React.FC = () => {
     const [err2, setErr2] = useState<boolean>(!img2);
 
     const allMissingOrError = (!img1 || err1) && (!img2 || err2);
+    const hasOnlyOneImage =
+      (img1 && !err1 && (!img2 || err2)) || ((!img1 || err1) && img2 && !err2);
 
     if (allMissingOrError) {
       return (
@@ -1124,10 +1306,30 @@ const MainScreen: React.FC = () => {
       );
     }
 
+    // 이미지가 1장만 있을 때는 전체 너비 사용
+    if (hasOnlyOneImage) {
+      const singleImage = img1 && !err1 ? img1 : img2;
+      return (
+        <div className="mb-4">
+          <img
+            src={singleImage}
+            alt="Place photo"
+            decoding="async"
+            loading="eager"
+            className="w-full h-[136px] object-cover rounded-2xl"
+            onError={() => {
+              if (img1 && !err1) setErr1(true);
+              else setErr2(true);
+            }}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="grid grid-cols-2 gap-4 mb-4">
         {/* 첫 번째 칸 */}
-        {img1 && (
+        {img1 && !err1 && (
           <img
             src={img1}
             alt="Place photo 1"
@@ -1139,7 +1341,7 @@ const MainScreen: React.FC = () => {
         )}
 
         {/* 두 번째 칸 */}
-        {img2 && (
+        {img2 && !err2 && (
           <img
             src={img2}
             alt="Place photo 2"
@@ -1155,8 +1357,10 @@ const MainScreen: React.FC = () => {
 
   const heroTitle =
     selectedPlace?.displayName || "Burger Boy and Burger girl are dancing now";
-  const img1 = selectedPlace?.photos?.[0] || "/sample/burger.jpg";
-  const img2 = selectedPlace?.photos?.[1] || "/sample/bibimbap.jpg";
+
+  // img1, img2 우선순위: selectedPlace.photos > reviewImages > 없음
+  const img1 = selectedPlace?.photos?.[0] || reviewImages[0] || undefined;
+  const img2 = selectedPlace?.photos?.[1] || reviewImages[1] || undefined;
   // DB에서 가져온 리뷰 통계만 사용
   const rating = placeReviewStats?.averageRating || 0;
   const ratingCount = placeReviewStats?.count || 0;
@@ -1348,32 +1552,71 @@ const MainScreen: React.FC = () => {
         }`}
       >
         {/* 지도 영역 */}
-        <MapView
-          onLocationResolved={(city, town) => {
-            setCityName(city);
-            setTownName(town);
-            // cityName과 townName도 함께 저장
-            if (currentLocation) {
-              saveLocation(currentLocation, city, town);
-            } else {
-              // currentLocation이 없어도 저장된 위치가 있으면 업데이트
-              const saved = getLastKnownLocation();
-              if (saved) {
-                saveLocation({ lat: saved.lat, lng: saved.lng }, city, town);
+        <div
+          className="w-full h-full relative"
+          onClick={(e) => {
+            // bottom sheet 외부(지도) 클릭 시 가게 이름만 보이는 높이로
+            if (
+              selectedPlace &&
+              sheetHeight === "full" &&
+              !sheetHostRef.current?.contains(e.target as Node)
+            ) {
+              setSheetHeight("title");
+              const titleHeight = 96; // 가게 이름 영역 높이
+              if (sheetRef.current?.snapTo) {
+                try {
+                  sheetRef.current.snapTo(titleHeight);
+                } catch {
+                  try {
+                    sheetRef.current.snapTo(0);
+                  } catch {}
+                }
               }
             }
           }}
-          onPlaceSelected={(details) => {
-            setSelectedPlace(details); // 프리로드 완료 후 전달됨
-          }}
-          onMapLocationChanged={(location) => {
-            // 검색 결과 선택으로 지도 위치가 변경되면 currentLocation 업데이트
-            setCurrentLocation(location);
-            // console.log("지도 위치 변경됨:", location);
-          }}
-          userPfpUrl={userPfpUrl}
-          activeTab={activeTab}
-        />
+        >
+          <MapView
+            onLocationResolved={(city, town) => {
+              setCityName(city);
+              setTownName(town);
+              // cityName과 townName도 함께 저장
+              if (currentLocation) {
+                saveLocation(currentLocation, city, town);
+              } else {
+                // currentLocation이 없어도 저장된 위치가 있으면 업데이트
+                const saved = getLastKnownLocation();
+                if (saved) {
+                  saveLocation({ lat: saved.lat, lng: saved.lng }, city, town);
+                }
+              }
+            }}
+            onPlaceSelected={(details) => {
+              setSelectedPlace(details); // 프리로드 완료 후 전달됨
+            }}
+            onMapLocationChanged={(location) => {
+              // 검색 결과 선택으로 지도 위치가 변경되면 currentLocation 업데이트
+              setCurrentLocation(location);
+              // console.log("지도 위치 변경됨:", location);
+            }}
+            userPfpUrl={userPfpUrl}
+            activeTab={activeTab}
+          />
+
+          {/* GPS 플로팅 버튼 (bottom sheet가 없을 때만 표시) */}
+          {(!selectedPlace || sheetHeight === "closed") && (
+            <button
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("fe:requestCurrentLocation")
+                );
+              }}
+              className="absolute bottom-4 right-4 z-10 rounded-full"
+              title="현재 위치로 이동"
+            >
+              <img src="/icons/gps.svg" className="w-10 h-10" alt="GPS" />
+            </button>
+          )}
+        </div>
 
         {/* 상단 */}
         <div className="absolute top-16 left-0 w-full z-10 p-4 pointer-events-none">
@@ -1382,121 +1625,133 @@ const MainScreen: React.FC = () => {
             <div className="text-title-600 text-gray-800 inline-block px-2 py-1 rounded-lg">
               {cityName}
             </div>
-            <div className="text-display-700 text-gray-800 mt-4 px-2">
-              {townName}
-            </div>
           </div>
 
-          {/* 2줄: 좌측 검색 입력 + 우측 버튼 묶음 (버튼과 같은 높이) */}
-          <div className="mt-2 flex items-center justify-between gap-2 pointer-events-none">
-            {/* 좌측: 검색 입력 (searchOpen 일 때만 표시) */}
-            <div className="pointer-events-auto flex-1 min-w-0">
-              {searchOpen && (
-                <div className="h-10 flex items-center gap-2 bg-white rounded-[16px] shadow-[0_0_6px_0_rgba(0,0,0,0.16)] px-3">
+          {/* 2줄: 좌측 Town 라벨 + 우측 검색 입력 및 버튼 묶음 (같은 높이) */}
+          <div className="mt-4 flex items-center justify-between gap-2 pointer-events-none">
+            {/* 좌측: Town 라벨 (searchOpen일 때 숨김) */}
+            {!searchOpen && (
+              <div className="text-location-content-700 text-gray-800 px-2 pointer-events-auto">
+                {townName}
+              </div>
+            )}
+
+            {/* 우측: 검색 입력 및 버튼 묶음 */}
+            <div
+              className={`flex items-center gap-2 pointer-events-none ${searchOpen ? "flex-1" : "justify-end"}`}
+            >
+              {/* 검색 입력 (searchOpen 일 때만 표시) */}
+              <div className="pointer-events-auto flex-1 min-w-0">
+                {searchOpen && (
+                  <div className="h-10 flex items-center gap-2 bg-white rounded-[16px] shadow-[0_0_6px_0_rgba(0,0,0,0.16)] px-3">
+                    <img
+                      src="/icons/search-lg.svg"
+                      className="w-4 h-4 opacity-80"
+                    />
+                    <input
+                      ref={inputRef}
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="가게 이름 또는 주소 검색"
+                      className="flex-1 h-full outline-none bg-transparent text-[14px] leading-[20px] placeholder:text-gray-400"
+                    />
+                    {!!query && (
+                      <button
+                        onClick={() => setQuery("")}
+                        className="p-1 rounded-[8px] hover:bg-gray-100"
+                        aria-label="Clear"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 액션 버튼 묶음 (항상 표시) */}
+              <div className="pointer-events-auto flex justify-center items-center gap-2">
+                {/* Search 버튼 */}
+                <button
+                  onClick={() => setSearchOpen((v) => !v)}
+                  className="flex justify-center items-center w-10 h-10 p-2 bg-white rounded-[16px] shadow-[0_0_4px_0_rgba(0,0,0,0.24)]"
+                  aria-label="Search"
+                >
                   <img
                     src="/icons/search-lg.svg"
+                    alt="Search"
                     className="w-4 h-4 opacity-80"
                   />
-                  <input
-                    ref={inputRef}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="가게 이름 또는 주소 검색"
-                    className="flex-1 h-full outline-none bg-transparent text-[14px] leading-[20px] placeholder:text-gray-400"
-                  />
-                  {!!query && (
-                    <button
-                      onClick={() => setQuery("")}
-                      className="p-1 rounded-[8px] hover:bg-gray-100"
-                      aria-label="Clear"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+                </button>
 
-            {/* 우측: 액션 버튼 묶음 (항상 표시) */}
-            <div className="pointer-events-auto flex justify-center items-center gap-2">
-              {/* Search 버튼 */}
-              <button
-                onClick={() => setSearchOpen((v) => !v)}
-                className="flex justify-center items-center w-10 h-10 p-2 bg-white rounded-[16px] shadow-[0_0_4px_0_rgba(0,0,0,0.24)]"
-                aria-label="Search"
-              >
-                <img
-                  src="/icons/search-lg.svg"
-                  alt="Search"
-                  className="w-4 h-4 opacity-80"
-                />
-              </button>
-
-              {/* Map/Grid 토글 */}
-              <div className="flex items-center gap-0.5 bg-gray-100 rounded-[16px]">
-                <button
-                  data-active={viewMode === "map"}
-                  onClick={() => setViewMode("map")}
-                  className="
+                {/* Map/Grid 토글 */}
+                <div className="flex items-center gap-0.5 bg-gray-100 rounded-[16px]">
+                  <button
+                    data-active={viewMode === "map"}
+                    onClick={() => setViewMode("map")}
+                    className="
             flex justify-center items-center w-10 h-10
             p-2 rounded-[16px] data-[active=true]:shadow-[0_0_4px_0_rgba(0,0,0,0.24)]
             data-[active=true]:bg-white data-[active=false]:bg-gray-100 
             transition-colors
           "
-                  aria-pressed={viewMode === "map"}
-                  aria-label="Map"
-                >
-                  <img
-                    src="/icons/map-01.svg"
-                    alt="Map"
-                    className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
-                  />
-                </button>
+                    aria-pressed={viewMode === "map"}
+                    aria-label="Map"
+                  >
+                    <img
+                      src="/icons/map-01.svg"
+                      alt="Map"
+                      className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
+                    />
+                  </button>
 
-                <button
-                  data-active={viewMode === "grid"}
-                  onClick={() =>
-                    navigate("/stores", {
-                      state: {
-                        cityName,
-                        townName,
-                        userLocation:
-                          currentLocation ||
-                          (() => {
-                            // 저장된 위치 또는 서울 시청
-                            try {
-                              const saved =
-                                localStorage.getItem("lastKnownLocation");
-                              if (saved) {
-                                const location = JSON.parse(saved);
-                                return { lat: location.lat, lng: location.lng };
+                  <button
+                    data-active={viewMode === "grid"}
+                    onClick={() =>
+                      navigate("/stores", {
+                        state: {
+                          cityName,
+                          townName,
+                          userLocation:
+                            currentLocation ||
+                            (() => {
+                              // 저장된 위치 또는 서울 시청
+                              try {
+                                const saved =
+                                  localStorage.getItem("lastKnownLocation");
+                                if (saved) {
+                                  const location = JSON.parse(saved);
+                                  return {
+                                    lat: location.lat,
+                                    lng: location.lng,
+                                  };
+                                }
+                              } catch (error) {
+                                console.warn(
+                                  "저장된 위치 정보를 불러올 수 없습니다:",
+                                  error
+                                );
                               }
-                            } catch (error) {
-                              console.warn(
-                                "저장된 위치 정보를 불러올 수 없습니다:",
-                                error
-                              );
-                            }
-                            return { lat: 37.5667467, lng: 126.9780429 };
-                          })(),
-                      },
-                    })
-                  }
-                  className="
+                              return { lat: 37.5667467, lng: 126.9780429 };
+                            })(),
+                        },
+                      })
+                    }
+                    className="
             flex justify-center items-center w-10 h-10
             p-2 rounded-[16px] data-[active=true]:shadow-[0_0_4px_0_rgba(0,0,0,0.24)]
             data-[active=true]:bg-white data-[active=false]:bg-gray-100
             transition-colors
           "
-                  aria-pressed={viewMode === "grid"}
-                  aria-label="Grid"
-                >
-                  <img
-                    src="/icons/grid-01.svg"
-                    alt="Grid"
-                    className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
-                  />
-                </button>
+                    aria-pressed={viewMode === "grid"}
+                    aria-label="Grid"
+                  >
+                    <img
+                      src="/icons/grid-01.svg"
+                      alt="Grid"
+                      className="w-4 h-4 opacity-60 data-[active=true]:opacity-100 transition-opacity"
+                    />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1542,20 +1797,6 @@ const MainScreen: React.FC = () => {
           )}
         </div>
 
-        {/* FAB */}
-        {/* {!showContent && (
-          <button
-            className="absolute bottom-24 right-4 z-10 p-4 bg-orange-400 hover:bg-orange-500 rounded-[24px] flex items-center justify-center "
-            aria-label="Add"
-          >
-            <img
-              src="/icons/plus.svg"
-              alt="Add"
-              className="w-6 h-6 text-white"
-            />
-          </button>
-        )} */}
-
         {/* Bottom Sheet (0.075 / 0.46 / 1.0 단계) - near-me 탭에서만 표시 */}
         {activeTab === "near-me" && (
           <div ref={sheetHostRef}>
@@ -1564,80 +1805,131 @@ const MainScreen: React.FC = () => {
               open={true}
               blocking={false}
               snapPoints={({ maxHeight }) => {
-                if (!selectedPlace) {
-                  return [0.08 * maxHeight];
+                if (!selectedPlace || sheetHeight === "closed") {
+                  return [0]; // 높이 0으로 고정
                 }
-                return [0.08 * maxHeight, 0.46 * maxHeight];
+                // title 높이 계산 (가게 이름 + 버튼 영역 높이)
+                const titleHeight = 96; // 가게 이름 영역 높이
+                // 콘텐츠 실제 높이 사용 (측정된 높이가 있으면 사용, 없으면 기본값)
+                const fullHeight =
+                  contentHeight > 0 ? contentHeight : 0.46 * maxHeight;
+                return [titleHeight, fullHeight]; // title 높이와 콘텐츠 높이
               }}
-              defaultSnap={({ snapPoints }) => snapPoints[0]}
+              defaultSnap={({ snapPoints }) => {
+                if (!selectedPlace || sheetHeight === "closed") {
+                  return 0; // 높이 0
+                }
+                if (sheetHeight === "title") {
+                  return 0; // title 높이 (첫 번째 snap point)
+                }
+                return snapPoints[1] || snapPoints[0]; // full 높이
+              }}
+              onSpringStart={(event) => {
+                // bottom sheet가 끌어올려질 때 감지
+                if (
+                  event.type === "OPEN" &&
+                  selectedPlace &&
+                  sheetHeight === "title"
+                ) {
+                  // title 상태에서 끌어올리면 full로 변경
+                  const currentHeight = sheetRef.current?.height || 0;
+                  const titleHeight = 96;
+                  if (currentHeight > titleHeight) {
+                    setSheetHeight("full");
+                  }
+                }
+              }}
               onDismiss={() => {}}
             >
-              {!showContent ? (
-                // 0.46 미만: 프리뷰
-                <div className="p-3">
-                  <p className="text-center text-sm text-gray-500">
-                    지도를 탭해 주변 가게를 선택하세요
-                  </p>
-                </div>
+              {!showContent || sheetHeight === "closed" ? (
+                // 초기 상태: 높이 0으로 고정
+                <button
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new CustomEvent("fe:requestCurrentLocation")
+                    );
+                  }}
+                  className="absolute bottom-4 right-4 z-10 rounded-full"
+                  title="현재 위치로 이동"
+                >
+                  <img src="/icons/gps.svg" className="w-10 h-10" alt="GPS" />
+                </button>
               ) : (
-                // 0.46 이상: 이미지 카드/별점/버튼
-                <div className="p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-place-title leading-snug flex-1 min-w-0 line-clamp-2 mr-1">
-                      {heroTitle}
-                    </div>
-                    <div className="flex gap-2 flex-none shrink-0">
-                      <button
-                        onClick={handleShare}
-                        className="p-3 bg-gray-100 hover:bg-gray-200 rounded-[16px] transition-colors"
-                        title="공유하기"
-                      >
-                        <img src="/icons/share-07.svg" className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={handleBookmarkToggle}
-                        className={`p-3 rounded-[16px] transition-colors ${
-                          isBookmarked
-                            ? "bg-redorange-100 hover:bg-redorange-200"
-                            : "bg-gray-100 hover:bg-gray-200"
-                        }`}
-                        title={isBookmarked ? "북마크 해제" : "북마크 추가"}
-                      >
-                        <img
-                          src={
+                // showContent가 true이면 항상 전체 콘텐츠 렌더링 (높이만 조정)
+                <div>
+                  <button
+                    onClick={() => {
+                      window.dispatchEvent(
+                        new CustomEvent("fe:requestCurrentLocation")
+                      );
+                    }}
+                    className="absolute mt-[-70px] right-4 z-10 rounded-full"
+                    title="현재 위치로 이동"
+                  >
+                    <img src="/icons/gps.svg" className="w-10 h-10" alt="GPS" />
+                  </button>
+                  <div ref={contentRef} className="p-5 pb-[20px]">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-place-title leading-snug flex-1 min-w-0 line-clamp-2 mr-1">
+                        {heroTitle}
+                      </div>
+                      <div className="flex gap-2 flex-none shrink-0">
+                        <button
+                          onClick={handleShare}
+                          className="p-3 bg-gray-100 hover:bg-gray-200 rounded-[16px] transition-colors"
+                          title="공유하기"
+                        >
+                          <img src="/icons/share-07.svg" className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={handleBookmarkToggle}
+                          className={`p-3 rounded-[16px] transition-colors ${
                             isBookmarked
-                              ? "/icons/bookmark-added.svg"
-                              : "/icons/bookmark.svg"
-                          }
-                          className="w-4 h-4"
-                        />
+                              ? "bg-redorange-100 hover:bg-redorange-200"
+                              : "bg-gray-100 hover:bg-gray-200"
+                          }`}
+                          title={isBookmarked ? "북마크 해제" : "북마크 추가"}
+                        >
+                          <img
+                            src={
+                              isBookmarked
+                                ? "/icons/bookmark-added.svg"
+                                : "/icons/bookmark.svg"
+                            }
+                            className="w-4 h-4"
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 이미지 2개 */}
+                    <PhotosBlock img1={img1} img2={img2} />
+
+                    {/* 별점 + 리뷰수 + 버튼 */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Stars rating={rating} />
+                        <span className="text-rating-count">
+                          ({ratingCount})
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (!selectedPlace) return;
+                          const slug = toSlug(
+                            selectedPlace.displayName || "store"
+                          );
+                          navigate(`/store/${slug}`, { state: selectedPlace });
+                        }}
+                        className="px-4 py-2.5 bg-black text-white rounded-xl font-semibold flex items-center gap-2"
+                      >
+                        <span className="text-button-content">
+                          View Details
+                        </span>
+                        <span>→</span>
                       </button>
                     </div>
-                  </div>
-
-                  {/* 이미지 2개 */}
-                  <PhotosBlock img1={img1} img2={img2} />
-
-                  {/* 별점 + 리뷰수 + 버튼 */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Stars rating={rating} />
-                      <span className="text-rating-count">({ratingCount})</span>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (!selectedPlace) return;
-                        const slug = toSlug(
-                          selectedPlace.displayName || "store"
-                        );
-                        navigate(`/store/${slug}`, { state: selectedPlace });
-                      }}
-                      className="px-4 py-2.5 bg-black text-white rounded-xl font-semibold flex items-center gap-2"
-                    >
-                      <span className="text-button-content">View Details</span>
-                      <span>→</span>
-                    </button>
                   </div>
                 </div>
               )}

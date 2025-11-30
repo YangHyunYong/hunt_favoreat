@@ -36,6 +36,8 @@ function toSlug(name: string) {
     .replace(/^-+|-+$/g, "");
 }
 
+const ONBOARDING_COMPLETED_KEY = "favoreat_onboarding_completed";
+
 interface OnboardingSearchProps {
   onBack: () => void;
   onSearchComplete: (results: SearchResult[], searchQuery: string) => void;
@@ -360,6 +362,8 @@ const OnboardingSearch: React.FC<OnboardingSearchProps> = ({
   const handleNext = async () => {
     if (selectedPrediction && fullPlaceDetails) {
       // 선택된 항목이 있고 전체 상세 정보가 있으면 StoreDetailPage로 이동
+      // 온보딩 완료 표시
+      localStorage.setItem(ONBOARDING_COMPLETED_KEY, "true");
       const slug = toSlug(fullPlaceDetails.displayName || "store");
       // console.log("=== StoreDetailPage로 이동 ===");
       // console.log("slug:", slug);

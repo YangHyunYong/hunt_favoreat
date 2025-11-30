@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { getLeaderboard, getTodayReviewCounts } from "../supabaseClient";
+import {
+  getLeaderboard,
+  getWeeklyLeaderboard,
+  getTodayReviewCounts,
+} from "../supabaseClient";
 import { useAccount } from "wagmi";
 
 interface LeaderboardUser {
@@ -26,10 +30,13 @@ const Leaderboard: React.FC = () => {
         if (isInitialMount.current) {
           setLoading(true);
         }
-        const data = await getLeaderboard();
 
-        // weekly일 때는 오늘 작성한 리뷰 개수도 가져오기
+        let data;
         if (period === "weekly") {
+          // Weekly: UTC 기준 월요일~일요일 포인트 계산
+          data = await getWeeklyLeaderboard();
+
+          // 오늘 작성한 리뷰 개수도 가져오기
           const walletAddresses = data.map((user) => user.wallet_address);
           const reviewCounts = await getTodayReviewCounts(walletAddresses);
 
@@ -40,6 +47,8 @@ const Leaderboard: React.FC = () => {
 
           setUsers(usersWithCounts);
         } else {
+          // Total: 전체 포인트 사용
+          data = await getLeaderboard();
           setUsers(data);
         }
       } catch (error) {
@@ -304,14 +313,16 @@ const Leaderboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* 트로피 아이콘 */}
-                  <div className="relative shrink-0 size-[16px]">
-                    <img
-                      src="/icons/throphy.svg"
-                      alt="trophy"
-                      className="block max-w-none size-full"
-                    />
-                  </div>
+                  {/* 트로피 아이콘 (3등까지만 표시) */}
+                  {rank <= 3 && (
+                    <div className="relative shrink-0 size-[16px]">
+                      <img
+                        src="/icons/throphy.svg"
+                        alt="trophy"
+                        className="block max-w-none size-full"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             );
