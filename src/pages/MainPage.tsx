@@ -1607,7 +1607,7 @@ const MainScreen: React.FC = () => {
                   new CustomEvent("fe:requestCurrentLocation")
                 );
               }}
-              className="absolute bottom-5 right-4 z-10 rounded-full pointer-events-auto"
+              className="absolute bottom-5 right-4 z-10 rounded-full pointer-events-auto bg-white shadow-[0_0_4px_0_rgba(0,0,0,0.24)]"
               title="현재 위치로 이동"
             >
               <img
@@ -1851,7 +1851,7 @@ const MainScreen: React.FC = () => {
                       new CustomEvent("fe:requestCurrentLocation")
                     );
                   }}
-                  className="absolute bottom-5 right-4 z-10 rounded-full"
+                  className="absolute bottom-5 right-4 z-10 rounded-full bg-white shadow-[0_0_4px_0_rgba(0,0,0,0.24)]"
                   title="현재 위치로 이동"
                 >
                   <img
@@ -1870,7 +1870,7 @@ const MainScreen: React.FC = () => {
                         new CustomEvent("fe:requestCurrentLocation")
                       );
                     }}
-                    className="absolute mt-[-70px] right-4 z-10 rounded-full"
+                    className="absolute mt-[-70px] right-4 z-10 rounded-full bg-white shadow-[0_0_4px_0_rgba(0,0,0,0.24)]"
                     title="현재 위치로 이동"
                   >
                     <img
